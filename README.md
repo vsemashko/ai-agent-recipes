@@ -234,27 +234,148 @@ Examples:
 ## 🐛 Troubleshooting
 
 ### CLI not found after installation
+
+**Symptoms:**
 ```bash
-# Restart your shell
+agent-recipes: command not found
+```
+
+**Solutions:**
+```bash
+# 1. Restart your shell
+exec $SHELL
+
+# 2. Or source your RC file
 source ~/.zshrc  # or ~/.bashrc
 
-# Or manually add to PATH
+# 3. Or manually add to PATH
 export PATH="$PATH:$HOME/.stashaway-agent-recipes/bin"
+
+# 4. Verify installation
+ls -la ~/.stashaway-agent-recipes/bin/agent-recipes
 ```
 
 ### Deno not installed
+
+**Symptoms:**
 ```bash
+❌ Deno is not installed
+```
+
+**Solutions:**
+```bash
+# Install Deno
 curl -fsSL https://deno.land/install.sh | sh
+
+# Add Deno to PATH (add to ~/.zshrc or ~/.bashrc)
+export PATH="$HOME/.deno/bin:$PATH"
+
+# Verify
+deno --version
 ```
 
 ### Permission errors
+
+**Symptoms:**
 ```bash
-chmod +x ~/.stashaway-agent-recipes/bin/agent-recipes
+Permission denied: ~/.stashaway-agent-recipes/...
 ```
+
+**Solutions:**
+```bash
+# Fix binary permissions
+chmod +x ~/.stashaway-agent-recipes/bin/agent-recipes
+
+# Fix directory permissions
+chmod -R u+rw ~/.stashaway-agent-recipes/
+```
+
+### Sync fails or hangs
+
+**Symptoms:**
+```bash
+agent-recipes sync
+# Hangs or fails with errors
+```
+
+**Solutions:**
+```bash
+# 1. Check if config is corrupted
+cat ~/.stashaway-agent-recipes/config.json
+
+# 2. Remove config and reinstall
+rm ~/.stashaway-agent-recipes/config.json
+agent-recipes sync --force
+
+# 3. Check file permissions
+ls -la ~/.config/claude-code/
+ls -la ~/.codex/
+```
+
+### Skills not appearing in Claude Code
+
+**Symptoms:**
+Claude doesn't recognize skills or commands.
+
+**Solutions:**
+```bash
+# 1. Verify sync completed successfully
+agent-recipes info
+
+# 2. Check files exist
+ls -la ~/.config/claude-code/CLAUDE.md
+ls -la ~/.config/claude-code/AGENTS.md
+ls -la ~/.config/claude-code/skills/
+
+# 3. Verify symlink works
+ls -la ~/.config/claude-code/skills/rightsize/SKILL.md
+
+# 4. Re-sync
+agent-recipes sync --force
+
+# 5. Restart Claude Code
+```
+
+### Symlink creation failed
+
+**Symptoms:**
+```bash
+ℹ Could not create symlink, copying directory instead
+```
+
+**This is normal** on Windows or certain filesystems. The tool automatically falls back to copying the directory, which works the same way.
+
+### HOME directory not found
+
+**Symptoms:**
+```bash
+Error: Could not determine home directory
+```
+
+**Solutions:**
+```bash
+# Check if HOME is set
+echo $HOME
+
+# If not, set it manually
+export HOME=/Users/your-username  # macOS/Linux
+export HOME=/c/Users/your-username  # Windows Git Bash
+
+# Or set AGENT_RECIPES_HOME
+export AGENT_RECIPES_HOME=/path/to/install/location
+```
+
+### For More Help
+
+- See [TESTING.md](./TESTING.md) for comprehensive testing procedures
+- Check [GitLab Issues](https://gitlab.stashaway.com/vladimir.semashko/stashaway-agent-recipes/-/issues)
+- Ask in #agent-recipes Slack channel (to be created)
 
 ## 📚 Additional Resources
 
+- [TESTING.md](./TESTING.md) - Comprehensive testing guide
 - [PLAN_claude.md](./PLAN_claude.md) - Detailed implementation plan
+- [CLAUDE.md](./CLAUDE.md) - Instructions for working with this repository
 - [Claude Code Documentation](https://docs.claude.com/claude-code)
 - [Cursor Documentation](https://cursor.sh/docs)
 
