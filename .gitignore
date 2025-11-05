@@ -1,0 +1,15 @@
+lib
+node_modules
+coverage
+!.npmrc
+
+.idea
+.vscode
+.cursor
+.claude
+yarn-error.log
+.env
+.envrc
+
+# TypeScript incremental build cache
+*.tsbuildinfo
