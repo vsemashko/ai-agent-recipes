@@ -25,9 +25,8 @@ stashaway-agent-recipes/
 │   ├── rightsize/           # RightSize checker skill
 │   └── commit-message/      # Commit message formatter
 ├── instructions/             # Platform-specific instructions
-│   ├── claude-code/         # Claude Code global instructions
-│   ├── codex/               # Codex CLI instructions
-│   └── cursor/              # Cursor rules
+│   └── claude-code/         # Claude Code global instructions
+│       └── CLAUDE.md        # Global instructions template
 ├── install.sh               # Installation script
 ├── CLAUDE.md                # This file
 ├── AGENTS.md                # Agent definitions
@@ -45,7 +44,9 @@ stashaway-agent-recipes/
 
 ## Development Workflow
 
-### Getting Started
+For detailed development instructions, including adding skills, modifying the CLI, and contributing, see [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+### Quick Reference
 
 ```bash
 # Install Deno if not already installed
@@ -92,10 +93,10 @@ deno task build
    - Test with Claude Code
    - Verify it works as expected
 
-4. **Convert to other formats**:
+4. **Verify format conversion** (Codex AGENTS.md is auto-generated during sync):
    ```bash
-   agent-recipes convert skills/my-skill/SKILL.md --format cursor-mdc
-   agent-recipes convert skills/my-skill/SKILL.md --format codex-json
+   # Preview how skill will appear in AGENTS.md
+   agent-recipes convert skills/my-skill/SKILL.md --format agent-md
    ```
 
 ### Adding a New CLI Command
@@ -185,19 +186,19 @@ description: Brief one-line description
 ## Platform-Specific Notes
 
 ### Claude Code
-- Instructions go to `~/.config/claude-code/`
-- Skills are loaded from the skills directory
-- Uses CLAUDE.md and AGENTS.md formats
+- Instructions go to `~/.config/claude-code/CLAUDE.md`
+- Skills symlinked from repository `skills/` directory
+- Uses CLAUDE.md + skills/ format (NOT AGENTS.md)
 
 ### Codex CLI
-- Instructions go to `~/.codex/`
-- Uses agents.json format
-- May need format conversion
+- AGENTS.md auto-generated and synced to `~/.codex/AGENTS.md`
+- Generated from all skills during sync
+- Uses markdown format (AGENTS.md)
 
 ### Cursor
+- **Status**: Support deferred to future release
 - Project-specific only (no global config)
 - Uses `.cursor/rules/*.mdc` format
-- New format as of 2025 (replaces .cursorrules)
 
 ## Release Process
 

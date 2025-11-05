@@ -66,17 +66,7 @@ export class Installer {
       tools.push('codex')
     }
 
-    // Check for Cursor
-    const cursorPaths = [
-      join(this.homeDir, '.cursor'),
-      join(this.homeDir, 'Library', 'Application Support', 'Cursor')
-    ]
-    for (const path of cursorPaths) {
-      if (await exists(path)) {
-        tools.push('cursor')
-        break
-      }
-    }
+    // Note: Cursor support deferred - only supports project-specific configuration
 
     return tools
   }
@@ -102,8 +92,7 @@ export class Installer {
 
     const tools = [
       { name: 'Claude Code', value: 'claude-code' },
-      { name: 'Codex CLI', value: 'codex' },
-      { name: 'Cursor (project-specific only)', value: 'cursor' }
+      { name: 'Codex CLI', value: 'codex' }
     ]
 
     for (const tool of tools) {
@@ -161,8 +150,6 @@ export class Installer {
           await this.syncClaudeCode(repoRoot, config)
         } else if (tool === 'codex') {
           await this.syncCodex(repoRoot, config)
-        } else if (tool === 'cursor') {
-          console.log('ℹ Cursor support is deferred until project-specific templates return')
         }
       } catch (error) {
         console.error(`⚠ Failed to sync ${tool}:`, error)
@@ -182,6 +169,7 @@ export class Installer {
     const targetPath = join(this.homeDir, '.config', 'claude-code')
     await Deno.mkdir(targetPath, { recursive: true })
 
+    // Sync CLAUDE.md (main instructions file)
     await this.syncFileWithHash(
       join(sourcePath, 'CLAUDE.md'),
       join(targetPath, 'CLAUDE.md'),
@@ -190,19 +178,16 @@ export class Installer {
       'Claude Code CLAUDE.md',
     )
 
-    await this.syncFileWithHash(
-      join(sourcePath, 'AGENTS.md'),
-      join(targetPath, 'AGENTS.md'),
-      config,
-      'claude-code/AGENTS.md',
-      'Claude Code AGENTS.md',
-    )
-
-    const skillsSource = join(sourcePath, 'skills')
+    // Sync skills directory from repo root
+    const skillsSource = join(repoRoot, 'skills')
     const skillsTarget = join(targetPath, 'skills')
 
     if (await exists(skillsSource)) {
       try {
+        // Remove existing symlink/directory if it exists
+        if (await exists(skillsTarget)) {
+          await Deno.remove(skillsTarget, { recursive: true })
+        }
         await Deno.symlink(skillsSource, skillsTarget, { type: 'dir' })
         console.log('  ✓ Created symlink for skills')
       } catch {
@@ -213,22 +198,50 @@ export class Installer {
   }
 
   private async syncCodex(repoRoot: string, config: InstallConfig): Promise<void> {
-    const sourcePath = join(repoRoot, 'instructions', 'codex')
-    if (!await exists(sourcePath)) {
-      console.log('ℹ Codex instructions not found in repository')
-      return
-    }
-
     const targetPath = join(this.homeDir, '.codex')
     await Deno.mkdir(targetPath, { recursive: true })
 
-    await this.syncFileWithHash(
-      join(sourcePath, 'agents.json'),
-      join(targetPath, 'agents.json'),
-      config,
-      'codex/agents.json',
-      'Codex agents.json',
-    )
+    // Auto-generate AGENTS.md from skills
+    const skillsDir = join(repoRoot, 'skills')
+    if (!await exists(skillsDir)) {
+      console.log('ℹ No skills found to sync for Codex')
+      return
+    }
+
+    // Import converter dynamically
+    const converterPath = join(dirname(import.meta.dirname!), 'lib', 'converter.ts')
+    const { batchConvertSkills } = await import(converterPath)
+
+    try {
+      console.log('  ⚙️  Generating AGENTS.md from skills...')
+      const results = await batchConvertSkills(skillsDir, 'agent-md')
+
+      if (results.length === 0) {
+        console.log('  ℹ No skills found to convert')
+        return
+      }
+
+      // Create AGENTS.md header
+      const header = `# AI Agent Skills for StashAway\n\nThis file is auto-generated from the stashaway-agent-recipes repository.\n\n`
+      const combined = header + results.map((r) => r.output).join('\n\n---\n\n')
+
+      // Write to target
+      const targetFile = join(targetPath, 'AGENTS.md')
+      const currentHash = await exists(targetFile)
+        ? await this.computeHash(await Deno.readTextFile(targetFile))
+        : ''
+      const newHash = await this.computeHash(combined)
+
+      if (currentHash === newHash) {
+        console.log('  ✓ Codex AGENTS.md is already up to date')
+      } else {
+        await Deno.writeTextFile(targetFile, combined)
+        config.fileHashes!['codex/AGENTS.md'] = newHash
+        console.log(`  ✓ Generated AGENTS.md with ${results.length} skill(s)`)
+      }
+    } catch (error) {
+      console.error('  ⚠ Failed to generate AGENTS.md:', error.message)
+    }
   }
 
   private async syncFileWithHash(
