@@ -1,93 +1,273 @@
-# stashaway-agent-recipes
+# StashAway Agent Recipes
 
+A centralized repository for reusable configurations, instructions, prompts, skills, and tools for AI coding agents (Claude Code, Codex CLI, Cursor, and more).
 
+## 🎯 What is This?
 
-## Getting started
+Agent Recipes is a knowledge base and quick-start toolkit that makes it easy to:
+- 🤖 Configure AI coding assistants with StashAway's standards and best practices
+- 🔧 Share reusable skills across your team
+- 📚 Maintain consistent AI agent behavior across projects
+- 🚀 Get new team members productive with AI tools quickly
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## ✨ Features
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+- **One-Command Installation**: Get started in seconds
+- **Cross-Platform**: Works with Claude Code, Codex CLI, and Cursor
+- **Pre-built Skills**: RightSize checker, commit message formatter, and more
+- **CLI Tool**: Easy management and synchronization
+- **Global Instructions**: Keep Claude Code and Codex CLI in sync automatically
 
-## Add your files
+## 🚀 Quick Start
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+### Installation
+
+```bash
+# Option 1: Quick install (recommended)
+curl https://agent-recipes.stashaway.internal | sh
+
+# Option 2: From source
+git clone git@gitlab.stashaway.com:vladimir.semashko/stashaway-agent-recipes.git
+cd stashaway-agent-recipes
+./install.sh
+```
+
+After installation, restart your shell:
+```bash
+source ~/.zshrc  # or ~/.bashrc
+```
+
+### Sync Instructions
+
+```bash
+# Install and configure instructions for Claude Code and Codex CLI
+agent-recipes sync
+```
+
+The CLI tracks previously installed versions and will prompt before overwriting any changes you make to `CLAUDE.md`, `AGENTS.md`, or `agents.json`.
+
+## 📦 Available Skills
+
+### RightSize Checker
+Automatically check if Kubernetes resources are appropriately sized based on actual usage.
+
+**Usage**: Ask Claude "Can you check if this service is rightsized?"
+
+**What it does**:
+- Queries RightSize API for CPU/memory recommendations
+- Compares with current deployment configurations
+- Updates values.yaml files with optimized resources
+- Creates a commit with the changes
+
+### Commit Message Formatter
+Generate properly formatted commit messages following StashAway conventions.
+
+**Usage**: Ask Claude "Create a commit for these changes"
+
+**What it does**:
+- Analyzes your git changes
+- Extracts ticket number from branch name
+- Generates properly formatted commit message
+- Follows type conventions (feat, fix, chore, refactor)
+
+## 💻 CLI Commands
+
+```bash
+# Core commands
+agent-recipes sync           # Install/update/sync everything
+agent-recipes list           # List available skills
+agent-recipes info           # Show installation info
+
+# For maintainers
+agent-recipes convert <path> # Convert skill formats
+```
+
+## 🛠️ Supported AI Tools
+
+### Claude Code
+- **Scope**: Global instructions
+- **Location**: `~/.config/claude-code/`
+- **Setup**: Automatic via `agent-recipes sync`
+- **Protection**: Sync prompts before overwriting your local edits
+
+### Codex CLI
+- **Scope**: Global instructions
+- **Location**: `~/.codex/`
+- **Setup**: Automatic via `agent-recipes sync`
+- **Protection**: Sync prompts before overwriting your local edits
+
+### Cursor
+- **Scope**: Project-specific (future enhancement)
+- **Status**: Support for automatic setup will return in a future release
+
+## 📖 Usage Examples
+
+### Checking Resource Sizing
+
+```bash
+# In any StashAway service repository
+# Just ask Claude:
+"Can you check if this service is rightsized?"
+
+# Claude will:
+# 1. Find the service name and namespace
+# 2. Query RightSize API for all regions
+# 3. Compare with current configs
+# 4. Show recommendations
+# 5. Offer to update files and commit
+```
+
+### Creating Commits
+
+```bash
+# After making changes
+# Ask Claude:
+"Create a commit for these changes"
+
+# Claude will:
+# 1. Analyze git diff
+# 2. Extract ticket number from branch name
+# 3. Generate formatted commit message
+# 4. Ask for your approval
+```
+
+## 🔧 Development
+
+### Project Structure
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.stashaway.com/vladimir.semashko/stashaway-agent-recipes.git
-git branch -M main
-git push -uf origin main
+stashaway-agent-recipes/
+├── cli/                    # CLI source code
+│   ├── main.ts            # Entry point
+│   ├── commands/          # Command implementations
+│   └── lib/               # Shared utilities
+├── skills/                # Skill definitions
+│   ├── rightsize/
+│   └── commit-message/
+├── instructions/          # Platform-specific instructions
+│   ├── claude-code/
+│   ├── codex/
+│   └── cursor/
+├── templates/             # Project templates
+└── install.sh            # Installation script
 ```
 
-## Integrate with your tools
+### Adding a New Skill
 
-- [ ] [Set up project integrations](https://gitlab.stashaway.com/vladimir.semashko/stashaway-agent-recipes/-/settings/integrations)
+1. Create a new directory in `skills/`:
+```bash
+mkdir skills/my-skill
+```
 
-## Collaborate with your team
+2. Create `SKILL.md` with frontmatter:
+```markdown
+---
+name: my-skill
+description: What this skill does
+---
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+# My Skill
 
-## Test and Deploy
+## When to Use
+...
 
-Use the built-in continuous integration in GitLab.
+## How It Works
+...
+```
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+3. Test with Claude Code:
+```bash
+agent-recipes sync
+```
 
-***
+4. Convert to other formats:
+```bash
+agent-recipes convert skills/my-skill/SKILL.md --format cursor-mdc
+```
 
-# Editing this README
+### Building the CLI
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+```bash
+cd cli
+deno task build
+```
 
-## Suggestions for a good README
+### Running Tests
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+```bash
+cd cli
+deno test
+```
 
-## Name
-Choose a self-explaining name for your project.
+## 🔄 Keeping Up to Date
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+```bash
+# Check for updates and sync latest instructions
+agent-recipes sync
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+# Force reinstall
+agent-recipes sync --force
+```
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+## 🤝 Contributing
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+We welcome contributions! To add a new skill or improve existing ones:
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+1. Fork the repository
+2. Create a feature branch
+3. Add your skill or improvements
+4. Test with multiple AI tools
+5. Submit a merge request
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+## 📝 Branch Naming Convention
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+When creating branches, follow this format:
+```
+<type>/<ticket-number>-<short-description>
+```
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+Examples:
+- `feat/SA-604-add-execution-mode`
+- `fix/SA-1234-prevent-xss`
+- `chore/SA-789-upgrade-deps`
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+## 🐛 Troubleshooting
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+### CLI not found after installation
+```bash
+# Restart your shell
+source ~/.zshrc  # or ~/.bashrc
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+# Or manually add to PATH
+export PATH="$PATH:$HOME/.stashaway-agent-recipes/bin"
+```
 
-## License
-For open source projects, say how it is licensed.
+### Deno not installed
+```bash
+curl -fsSL https://deno.land/install.sh | sh
+```
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+### Permission errors
+```bash
+chmod +x ~/.stashaway-agent-recipes/bin/agent-recipes
+```
+
+## 📚 Additional Resources
+
+- [PLAN_claude.md](./PLAN_claude.md) - Detailed implementation plan
+- [Claude Code Documentation](https://docs.claude.com/claude-code)
+- [Cursor Documentation](https://cursor.sh/docs)
+
+## 📄 License
+
+Internal StashAway tool - not for external distribution
+
+## 🙋 Support
+
+- **Slack**: #agent-recipes (to be created)
+- **Issues**: [GitLab Issues](https://gitlab.stashaway.com/vladimir.semashko/stashaway-agent-recipes/-/issues)
+- **Documentation**: This README and [PLAN_claude.md](./PLAN_claude.md)
+
+---
+
+**Built with ❤️ by the StashAway Platform Team**
