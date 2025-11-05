@@ -21,6 +21,13 @@ export class Installer {
 
   constructor() {
     this.homeDir = Deno.env.get('HOME') || Deno.env.get('USERPROFILE') || ''
+
+    if (!this.homeDir) {
+      throw new Error(
+        'Could not determine home directory. Please set HOME or USERPROFILE environment variable.',
+      )
+    }
+
     this.installDir = Deno.env.get('AGENT_RECIPES_HOME') ||
       join(this.homeDir, '.stashaway-agent-recipes')
     this.configPath = join(this.installDir, 'config.json')
@@ -37,6 +44,10 @@ export class Installer {
       const content = await Deno.readTextFile(this.configPath)
       return JSON.parse(content)
     } catch {
+      console.error(
+        '⚠ Warning: Could not read config file:',
+        error instanceof Error ? error.message : 'Unknown error',
+      )
       return null
     }
   }
@@ -204,9 +215,32 @@ export class Installer {
 
     if (await exists(skillsSource)) {
       try {
+        // Check if symlink already exists and points to the right location
+        if (await exists(skillsTarget)) {
+          try {
+            const linkInfo = await Deno.lstat(skillsTarget)
+            if (linkInfo.isSymlink) {
+              const currentTarget = await Deno.readLink(skillsTarget)
+              if (currentTarget === skillsSource) {
+                console.log('  ✓ Skills symlink already exists')
+                return
+              }
+              // Remove old symlink if it points elsewhere
+              await Deno.remove(skillsTarget)
+            } else {
+              // If it's a directory, remove it
+              await Deno.remove(skillsTarget, { recursive: true })
+            }
+          } catch {
+            // If we can't check, try to remove and recreate
+            await Deno.remove(skillsTarget, { recursive: true }).catch(() => {})
+          }
+        }
+
         await Deno.symlink(skillsSource, skillsTarget, { type: 'dir' })
         console.log('  ✓ Created symlink for skills')
-      } catch {
+      } catch (_error) {
+        console.log('  ℹ Could not create symlink, copying directory instead')
         await this.copyDirectory(skillsSource, skillsTarget)
         console.log('  ✓ Copied skills directory')
       }
@@ -239,53 +273,61 @@ export class Installer {
     hashKey: string,
     description: string,
   ): Promise<void> {
-    if (!await exists(source)) {
-      console.log(`  ℹ Skipped ${description}: source file not found`)
-      return
-    }
-
-    config.fileHashes ??= {}
-    const hashes = config.fileHashes
-
-    const sourceContent = await Deno.readTextFile(source)
-    const sourceHash = await this.computeHash(sourceContent)
-
-    const targetExists = await exists(target)
-    if (targetExists) {
-      const targetContent = await Deno.readTextFile(target)
-      const targetHash = await this.computeHash(targetContent)
-      const previousHash = hashes[hashKey]
-
-      if (targetHash === sourceHash) {
-        hashes[hashKey] = sourceHash
-        console.log(`  ✓ ${description} is already up to date`)
+    try {
+      if (!await exists(source)) {
+        console.log(`  ℹ Skipped ${description}: source file not found`)
         return
       }
 
-      if (previousHash && targetHash !== previousHash) {
-        const overwrite = await Confirm.prompt({
-          message: `${description} has local changes. Overwrite with repository version?`,
-          default: false,
-        })
-        if (!overwrite) {
-          console.log(`  ↩ Skipped ${description}`)
+      config.fileHashes ??= {}
+      const hashes = config.fileHashes
+
+      const sourceContent = await Deno.readTextFile(source)
+      const sourceHash = await this.computeHash(sourceContent)
+
+      const targetExists = await exists(target)
+      if (targetExists) {
+        const targetContent = await Deno.readTextFile(target)
+        const targetHash = await this.computeHash(targetContent)
+        const previousHash = hashes[hashKey]
+
+        if (targetHash === sourceHash) {
+          hashes[hashKey] = sourceHash
+          console.log(`  ✓ ${description} is already up to date`)
           return
         }
-      } else if (!previousHash && targetHash !== sourceHash) {
-        const overwrite = await Confirm.prompt({
-          message: `${description} already exists. Replace with repository version?`,
-          default: false,
-        })
-        if (!overwrite) {
-          console.log(`  ↩ Skipped ${description}`)
-          return
+
+        if (previousHash && targetHash !== previousHash) {
+          const overwrite = await Confirm.prompt({
+            message: `${description} has local changes. Overwrite with repository version?`,
+            default: false,
+          })
+          if (!overwrite) {
+            console.log(`  ↩ Skipped ${description}`)
+            return
+          }
+        } else if (!previousHash && targetHash !== sourceHash) {
+          const overwrite = await Confirm.prompt({
+            message: `${description} already exists. Replace with repository version?`,
+            default: false,
+          })
+          if (!overwrite) {
+            console.log(`  ↩ Skipped ${description}`)
+            return
+          }
         }
       }
-    }
 
-    await Deno.writeTextFile(target, sourceContent)
-    hashes[hashKey] = sourceHash
-    console.log(`  ✓ Synced ${description}`)
+      await Deno.writeTextFile(target, sourceContent)
+      hashes[hashKey] = sourceHash
+      console.log(`  ✓ Synced ${description}`)
+    } catch (error) {
+      console.error(
+        `  ❌ Failed to sync ${description}:`,
+        error instanceof Error ? error.message : 'Unknown error',
+      )
+      throw error
+    }
   }
 
   private async copyDirectory(source: string, target: string): Promise<void> {
@@ -310,13 +352,14 @@ export class Installer {
       .join('')
   }
 
-  checkForUpdates(): Promise<{ hasUpdate: boolean; latestVersion: string } | null> {
+  async checkForUpdates(): Promise<{ hasUpdate: boolean; latestVersion: string } | null> {
     try {
       // TODO: Implement actual update checking against GitLab
       // For now, return null
-      return Promise.resolve(null)
+      await Promise.resolve()
+      return null
     } catch {
-      return Promise.resolve(null)
+      return null
     }
   }
 

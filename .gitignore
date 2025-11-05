@@ -1,16 +1,40 @@
+# Dependencies
+node_modules
 lib
 !/cli/lib/
-node_modules
+
+# Coverage and test outputs
 coverage
+*.tsbuildinfo
+
+# Environment and config
+.env
+.envrc
 !.npmrc
 
+# IDE directories
 .idea
 .vscode
 .cursor
 .claude
-yarn-error.log
-.env
-.envrc
 
-# TypeScript incremental build cache
-*.tsbuildinfo
+# Logs
+yarn-error.log
+*.log
+npm-debug.log*
+
+# Deno specific
+.deno/
+deno.lock
+
+# Build outputs
+bin/
+dist/
+*.compiled
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Config files (user-specific)
+config.json
