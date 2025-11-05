@@ -66,17 +66,7 @@ export class Installer {
       tools.push('codex')
     }
 
-    // Check for Cursor
-    const cursorPaths = [
-      join(this.homeDir, '.cursor'),
-      join(this.homeDir, 'Library', 'Application Support', 'Cursor')
-    ]
-    for (const path of cursorPaths) {
-      if (await exists(path)) {
-        tools.push('cursor')
-        break
-      }
-    }
+    // Note: Cursor support deferred - only supports project-specific configuration
 
     return tools
   }
@@ -102,8 +92,7 @@ export class Installer {
 
     const tools = [
       { name: 'Claude Code', value: 'claude-code' },
-      { name: 'Codex CLI', value: 'codex' },
-      { name: 'Cursor (project-specific only)', value: 'cursor' }
+      { name: 'Codex CLI', value: 'codex' }
     ]
 
     for (const tool of tools) {
@@ -161,8 +150,6 @@ export class Installer {
           await this.syncClaudeCode(repoRoot, config)
         } else if (tool === 'codex') {
           await this.syncCodex(repoRoot, config)
-        } else if (tool === 'cursor') {
-          console.log('ℹ Cursor support is deferred until project-specific templates return')
         }
       } catch (error) {
         console.error(`⚠ Failed to sync ${tool}:`, error)
@@ -182,6 +169,7 @@ export class Installer {
     const targetPath = join(this.homeDir, '.config', 'claude-code')
     await Deno.mkdir(targetPath, { recursive: true })
 
+    // Sync CLAUDE.md (main instructions file)
     await this.syncFileWithHash(
       join(sourcePath, 'CLAUDE.md'),
       join(targetPath, 'CLAUDE.md'),
@@ -190,19 +178,16 @@ export class Installer {
       'Claude Code CLAUDE.md',
     )
 
-    await this.syncFileWithHash(
-      join(sourcePath, 'AGENTS.md'),
-      join(targetPath, 'AGENTS.md'),
-      config,
-      'claude-code/AGENTS.md',
-      'Claude Code AGENTS.md',
-    )
-
-    const skillsSource = join(sourcePath, 'skills')
+    // Sync skills directory from repo root
+    const skillsSource = join(repoRoot, 'skills')
     const skillsTarget = join(targetPath, 'skills')
 
     if (await exists(skillsSource)) {
       try {
+        // Remove existing symlink/directory if it exists
+        if (await exists(skillsTarget)) {
+          await Deno.remove(skillsTarget, { recursive: true })
+        }
         await Deno.symlink(skillsSource, skillsTarget, { type: 'dir' })
         console.log('  ✓ Created symlink for skills')
       } catch {
@@ -213,22 +198,50 @@ export class Installer {
   }
 
   private async syncCodex(repoRoot: string, config: InstallConfig): Promise<void> {
-    const sourcePath = join(repoRoot, 'instructions', 'codex')
-    if (!await exists(sourcePath)) {
-      console.log('ℹ Codex instructions not found in repository')
-      return
-    }
-
     const targetPath = join(this.homeDir, '.codex')
     await Deno.mkdir(targetPath, { recursive: true })
 
-    await this.syncFileWithHash(
-      join(sourcePath, 'agents.json'),
-      join(targetPath, 'agents.json'),
-      config,
-      'codex/agents.json',
-      'Codex agents.json',
-    )
+    // Auto-generate AGENTS.md from skills
+    const skillsDir = join(repoRoot, 'skills')
+    if (!await exists(skillsDir)) {
+      console.log('ℹ No skills found to sync for Codex')
+      return
+    }
+
+    // Import converter dynamically
+    const converterPath = join(dirname(import.meta.dirname!), 'lib', 'converter.ts')
+    const { batchConvertSkills } = await import(converterPath)
+
+    try {
+      console.log('  ⚙️  Generating AGENTS.md from skills...')
+      const results = await batchConvertSkills(skillsDir, 'agent-md')
+
+      if (results.length === 0) {
+        console.log('  ℹ No skills found to convert')
+        return
+      }
+
+      // Create AGENTS.md header
+      const header = `# AI Agent Skills for StashAway\n\nThis file is auto-generated from the stashaway-agent-recipes repository.\n\n`
+      const combined = header + results.map((r) => r.output).join('\n\n---\n\n')
+
+      // Write to target
+      const targetFile = join(targetPath, 'AGENTS.md')
+      const currentHash = await exists(targetFile)
+        ? await this.computeHash(await Deno.readTextFile(targetFile))
+        : ''
+      const newHash = await this.computeHash(combined)
+
+      if (currentHash === newHash) {
+        console.log('  ✓ Codex AGENTS.md is already up to date')
+      } else {
+        await Deno.writeTextFile(targetFile, combined)
+        config.fileHashes!['codex/AGENTS.md'] = newHash
+        console.log(`  ✓ Generated AGENTS.md with ${results.length} skill(s)`)
+      }
+    } catch (error) {
+      console.error('  ⚠ Failed to generate AGENTS.md:', error.message)
+    }
   }
 
   private async syncFileWithHash(
@@ -308,14 +321,171 @@ export class Installer {
     return Array.from(new Uint8Array(hashBuffer)).map((byte) => byte.toString(16).padStart(2, '0')).join('')
   }
 
-  async checkForUpdates(): Promise<{ hasUpdate: boolean; latestVersion: string } | null> {
+  async checkForUpdates(): Promise<{ hasUpdate: boolean; latestVersion: string; currentVersion: string } | null> {
     try {
-      // TODO: Implement actual update checking against GitLab
-      // For now, return null
+      // Check if install directory exists and is a git repository
+      const gitDir = join(this.installDir, '.git')
+      if (!await exists(gitDir)) {
+        console.log('  ℹ Not a git repository, skipping update check')
+        return null
+      }
+
+      // Fetch latest from origin (quietly)
+      const fetchCmd = new Deno.Command('git', {
+        args: ['fetch', 'origin', '--quiet'],
+        cwd: this.installDir,
+        stdout: 'null',
+        stderr: 'null'
+      })
+
+      const fetchResult = await fetchCmd.output()
+      if (!fetchResult.success) {
+        console.log('  ⚠ Could not fetch updates from remote')
+        return null
+      }
+
+      // Get current branch or default to main
+      const currentBranchCmd = new Deno.Command('git', {
+        args: ['rev-parse', '--abbrev-ref', 'HEAD'],
+        cwd: this.installDir,
+        stdout: 'piped',
+        stderr: 'null'
+      })
+      const currentBranchResult = await currentBranchCmd.output()
+      const currentBranch = currentBranchResult.success
+        ? new TextDecoder().decode(currentBranchResult.stdout).trim()
+        : 'main'
+
+      // Determine remote branch (try main first, fall back to master)
+      const remoteBranch = await this.getDefaultRemoteBranch()
+
+      // Get current commit hash
+      const currentHashCmd = new Deno.Command('git', {
+        args: ['rev-parse', 'HEAD'],
+        cwd: this.installDir,
+        stdout: 'piped'
+      })
+      const currentHashResult = await currentHashCmd.output()
+      if (!currentHashResult.success) {
+        return null
+      }
+      const currentHash = new TextDecoder().decode(currentHashResult.stdout).trim().slice(0, 7)
+
+      // Get remote commit hash
+      const remoteHashCmd = new Deno.Command('git', {
+        args: ['rev-parse', `origin/${remoteBranch}`],
+        cwd: this.installDir,
+        stdout: 'piped',
+        stderr: 'null'
+      })
+      const remoteHashResult = await remoteHashCmd.output()
+      if (!remoteHashResult.success) {
+        // Remote branch doesn't exist, no update available
+        return { hasUpdate: false, latestVersion: currentHash, currentVersion: currentHash }
+      }
+      const remoteHash = new TextDecoder().decode(remoteHashResult.stdout).trim().slice(0, 7)
+
+      // Check if remote is ahead
+      const revListCmd = new Deno.Command('git', {
+        args: ['rev-list', '--count', `HEAD..origin/${remoteBranch}`],
+        cwd: this.installDir,
+        stdout: 'piped',
+        stderr: 'null'
+      })
+      const revListResult = await revListCmd.output()
+
+      if (revListResult.success) {
+        const commitsAhead = parseInt(new TextDecoder().decode(revListResult.stdout).trim())
+        const hasUpdate = commitsAhead > 0
+
+        return {
+          hasUpdate,
+          latestVersion: remoteHash,
+          currentVersion: currentHash
+        }
+      }
+
       return null
-    } catch {
+    } catch (error) {
+      console.log('  ⚠ Update check failed:', error.message)
       return null
     }
+  }
+
+  async pullLatestChanges(): Promise<boolean> {
+    try {
+      // Get the default remote branch
+      const remoteBranch = await this.getDefaultRemoteBranch()
+
+      // Reset to remote branch (hard reset to avoid merge conflicts)
+      const resetCmd = new Deno.Command('git', {
+        args: ['reset', '--hard', `origin/${remoteBranch}`],
+        cwd: this.installDir,
+        stdout: 'piped',
+        stderr: 'piped'
+      })
+
+      const resetResult = await resetCmd.output()
+
+      if (!resetResult.success) {
+        const error = new TextDecoder().decode(resetResult.stderr)
+        console.error(`  ⚠ Git reset failed: ${error}`)
+        return false
+      }
+
+      // Clean any untracked files
+      const cleanCmd = new Deno.Command('git', {
+        args: ['clean', '-fd'],
+        cwd: this.installDir,
+        stdout: 'null',
+        stderr: 'null'
+      })
+
+      await cleanCmd.output()
+
+      return true
+    } catch (error) {
+      console.error(`  ⚠ Pull failed: ${error.message}`)
+      return false
+    }
+  }
+
+  private async getDefaultRemoteBranch(): Promise<string> {
+    try {
+      // Try to get default remote branch
+      const cmd = new Deno.Command('git', {
+        args: ['symbolic-ref', 'refs/remotes/origin/HEAD'],
+        cwd: this.installDir,
+        stdout: 'piped',
+        stderr: 'null'
+      })
+      const result = await cmd.output()
+
+      if (result.success) {
+        const output = new TextDecoder().decode(result.stdout).trim()
+        // Output is like "refs/remotes/origin/main"
+        return output.split('/').pop() || 'main'
+      }
+    } catch {
+      // Ignore errors
+    }
+
+    // Try main first, then master
+    const branches = ['main', 'master']
+    for (const branch of branches) {
+      const cmd = new Deno.Command('git', {
+        args: ['rev-parse', '--verify', `origin/${branch}`],
+        cwd: this.installDir,
+        stdout: 'null',
+        stderr: 'null'
+      })
+      const result = await cmd.output()
+      if (result.success) {
+        return branch
+      }
+    }
+
+    return 'main'
   }
 
   getInstallPath(): string {
