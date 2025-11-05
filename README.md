@@ -134,13 +134,30 @@ agent-recipes convert <path> # Convert skill formats
 
 ## 🔄 Keeping Up to Date
 
-```bash
-# Check for updates and sync latest instructions
-agent-recipes sync
+The CLI automatically checks for updates when you run `agent-recipes sync`:
 
-# Force reinstall
+```bash
+# Check for updates and sync instructions
+agent-recipes sync
+# If updates are available, you'll see:
+#   📦 New version available!
+#   Current: abc1234
+#   Latest:  def5678
+#   Run `agent-recipes sync --force` to update
+
+# Update to latest version and re-sync everything
 agent-recipes sync --force
+# This will:
+# - Pull latest changes from the repository
+# - Update all skills and instructions
+# - Re-sync to your AI tools
 ```
+
+**How it works:**
+- The CLI is installed as a git repository in `~/.stashaway-agent-recipes/`
+- Running `sync` checks if the remote `main` branch has new commits
+- Using `--force` performs a hard reset to the latest remote version
+- Instructions and skills are automatically re-synced after updates
 
 ## 🤝 Contributing
 

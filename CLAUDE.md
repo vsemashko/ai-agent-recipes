@@ -135,12 +135,21 @@ The installation logic is in `cli/lib/installer.ts`. Key methods:
 - `detectAITools()`: Auto-detect installed AI tools
 - `syncInstructions()`: Sync instructions to AI tools
 - `addToPath()`: Add CLI to system PATH
+- `checkForUpdates()`: Check git repository for updates
+- `pullLatestChanges()`: Pull latest changes from origin
+
+**Update Mechanism:**
+- Installation directory is a git repository
+- `checkForUpdates()` fetches from origin and compares commits
+- `pullLatestChanges()` does a hard reset to `origin/main` (or `origin/master`)
+- Supports both `main` and `master` as default branches
 
 When modifying:
 1. Preserve backward compatibility
 2. Test on fresh install
 3. Test on update scenario
-4. Verify PATH modification works
+4. Test with both main and master branches
+5. Verify PATH modification works
 
 ## Code Style
 

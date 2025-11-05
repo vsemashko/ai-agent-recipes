@@ -10,7 +10,7 @@ export const syncCommand = new Command()
     try {
       const isInstalled = await installer.isInstalled()
 
-      if (!isInstalled || options.force) {
+      if (!isInstalled) {
         // First time installation
         console.log('🚀 Installing StashAway Agent Recipes...\n')
 
@@ -48,6 +48,41 @@ export const syncCommand = new Command()
         console.log('  1. Restart your shell or run: source ~/.zshrc (or ~/.bashrc)')
         console.log('  2. Run `agent-recipes list` to see available skills')
         console.log('  3. Open your AI tools and confirm the global instructions are loaded')
+      } else if (options.force) {
+        // Force update - pull latest and re-sync everything
+        console.log('🔄 Force updating StashAway Agent Recipes...\n')
+
+        const config = await installer.getConfig()
+        if (!config) {
+          console.error('❌ Could not read config. Try reinstalling.')
+          Deno.exit(1)
+        }
+
+        // Check for updates first
+        const updateInfo = await installer.checkForUpdates()
+
+        if (updateInfo?.hasUpdate) {
+          console.log(`📥 Updating from ${updateInfo.currentVersion} to ${updateInfo.latestVersion}...\n`)
+
+          // Pull latest changes
+          const pullSuccess = await installer.pullLatestChanges()
+          if (!pullSuccess) {
+            console.error('❌ Failed to pull latest changes')
+            Deno.exit(1)
+          }
+
+          console.log('✓ Repository updated to latest version\n')
+        } else if (updateInfo) {
+          console.log(`✓ Already on latest version (${updateInfo.currentVersion})\n`)
+        }
+
+        // Re-sync instructions
+        console.log('📝 Re-syncing instructions...\n')
+        const updatedConfig = await installer.syncInstructions(config.installedTools, config)
+        updatedConfig.lastUpdateCheck = new Date().toISOString()
+        await installer.saveConfig(updatedConfig)
+
+        console.log('\n✅ Force update complete!')
       } else {
         // Update/sync existing installation
         console.log('🔄 Checking for updates...\n')
@@ -62,20 +97,25 @@ export const syncCommand = new Command()
         const updateInfo = await installer.checkForUpdates()
 
         if (updateInfo?.hasUpdate) {
-          console.log(`📦 New version available: ${updateInfo.latestVersion}`)
-          console.log('   Run `agent-recipes sync --force` to update')
+          console.log(`📦 New version available!`)
+          console.log(`   Current: ${updateInfo.currentVersion}`)
+          console.log(`   Latest:  ${updateInfo.latestVersion}`)
+          console.log(`\n   Run \`agent-recipes sync --force\` to update\n`)
+        } else if (updateInfo) {
+          console.log(`✓ Up to date (${updateInfo.currentVersion})\n`)
         } else {
-          console.log('✓ Already up to date')
+          console.log('✓ Version check skipped\n')
         }
 
         // Re-sync instructions
+        console.log('📝 Syncing instructions...\n')
         const updatedConfig = await installer.syncInstructions(config.installedTools, config)
 
         // Update last check time
         updatedConfig.lastUpdateCheck = new Date().toISOString()
         await installer.saveConfig(updatedConfig)
 
-        console.log('\n✅ Sync complete!')
+        console.log('✅ Sync complete!')
       }
     } catch (error) {
       console.error('❌ Error during sync:', error)
