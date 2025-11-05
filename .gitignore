@@ -1,4 +1,5 @@
 lib
+!/cli/lib/
 node_modules
 coverage
 !.npmrc
