@@ -114,7 +114,8 @@ export async function batchConvertSkills(
         const output = await convertSkillFile(skillFile, format)
         results.push({ skill: entry.name, output })
       } catch (error) {
-        console.error(`⚠ Failed to convert ${entry.name}:`, error.message)
+        const message = error instanceof Error ? error.message : String(error)
+        console.error(`⚠ Failed to convert ${entry.name}:`, message)
       }
     }
   }

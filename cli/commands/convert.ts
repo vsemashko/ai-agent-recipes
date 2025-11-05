@@ -87,7 +87,8 @@ export const convertCommand = new Command()
 
       console.log('\n✅ Conversion complete!')
     } catch (error) {
-      console.error('❌ Conversion failed:', error.message)
+      const message = error instanceof Error ? error.message : String(error)
+      console.error('❌ Conversion failed:', message)
       Deno.exit(1)
     }
   })
