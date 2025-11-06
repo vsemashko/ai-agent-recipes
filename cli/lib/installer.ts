@@ -378,9 +378,7 @@ export class Installer {
 
     await Deno.writeTextFile(targetPath, newContent)
     console.log(
-      hadManagedSection
-        ? `  ✓ Updated managed section in ${description}`
-        : `  ✓ Added managed section to ${description}`,
+      hadManagedSection ? `  ✓ Updated managed section in ${description}` : `  ✓ Added managed section to ${description}`,
     )
   }
 

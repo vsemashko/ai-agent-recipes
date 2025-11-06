@@ -12,17 +12,20 @@ Use this skill when creating git commits to ensure messages follow team standard
 ## Branch Naming Convention
 
 Branches should follow this format:
+
 ```
 <type>/<ticket-number>-<short-description-in-kebab-case>
 ```
 
 **Examples**:
+
 - `feat/SA-604-add-execution-mode-to-kafka-topic`
 - `fix/SA-1234-prevent-xss-in-user-input`
 - `chore/SA-789-upgrade-dependencies`
 - `refactor/SA-456-extract-auth-logic`
 
 **Extracting Ticket Number from Branch**:
+
 - If branch follows naming convention, extract ticket number automatically
 - If branch doesn't contain ticket number (e.g., `main`, `develop`, `feature-branch`), ask user for it
 - User can skip providing ticket number if not applicable
@@ -38,16 +41,20 @@ Branches should follow this format:
 ### Components
 
 #### Type (Required)
+
 - `feat` - New features that change behavior
 - `fix` - Bug fixes
 - `chore` - Package upgrades, version bumps, maintenance
 - `refactor` - Code refactors that do NOT change behavior
 
 #### Scope (Optional)
+
 Defines the domain/area of the system:
+
 - Examples: `(security)`, `(localisation)`, `(goals)`, `(auth)`
 
 #### Ticket Number (Recommended but Optional)
+
 - **Recommended**: Always include ticket number when available
 - **Optional**: Can be omitted if no ticket exists (e.g., minor fixes, experiments)
 - **GitLab tickets**: Use `#123` format
@@ -57,12 +64,14 @@ Defines the domain/area of the system:
 - **User prompt**: If not in branch name and not obvious, ask user (allow skip)
 
 **Examples without ticket number**:
+
 ```
 chore: Update README documentation
 fix: Correct typo in error message
 ```
 
 #### Subject (Required)
+
 - Describes WHAT the commit does (not why or how)
 - Written in imperative mood: "Add feature" not "Added feature" or "Adds feature"
 - Concise and clear
@@ -70,6 +79,7 @@ fix: Correct typo in error message
 - No period at the end
 
 #### Body (Optional)
+
 - Explains WHY or HOW
 - Required only if context isn't clear from subject/ticket/code
 - Can use any format (paragraphs, bullets, etc.)
@@ -78,6 +88,7 @@ fix: Correct typo in error message
 ## Examples
 
 ### Example 1: Feature with multiple changes
+
 ```
 feat: SA-604 Improve slack events listening node
 
@@ -86,6 +97,7 @@ feat: SA-604 Improve slack events listening node
 ```
 
 ### Example 2: Bug fix
+
 ```
 fix: SA-1234 Prevent XSS in user input fields
 
@@ -94,6 +106,7 @@ Added DOMPurify for client-side sanitization.
 ```
 
 ### Example 3: Refactor
+
 ```
 feat: SA-456 Extract auth logic into separate service
 
@@ -102,6 +115,7 @@ to improve testability and reusability.
 ```
 
 ### Example 4: Chore
+
 ```
 chore: #789 Upgrade dependencies to latest versions
 
@@ -110,11 +124,13 @@ handled in separate PRs.
 ```
 
 ### Example 5: Without ticket number
+
 ```
 chore: Update README with installation instructions
 ```
 
 ### Example 6: Branch name with ticket
+
 ```
 Branch: feat/SA-604-add-kafka-topic-env
 Commit: feat: SA-604 Add execution mode to kafka topic
@@ -141,6 +157,7 @@ When the user asks to create a commit or commit message:
 8. Present to user for approval
 
 **Workflow Example**:
+
 ```
 Agent: I'll create a commit message for these changes.
 [Checks branch: feat/SA-604-add-kafka-topic-env]
@@ -159,11 +176,8 @@ Proceed with this commit? (yes/no)
 
 ## Anti-patterns to Avoid
 
-❌ `feat: Added new feature` (not imperative)
-❌ `fix: Fix bug.` (period at end)
-❌ `Update code` (missing type and ticket)
-❌ `feat: Did some changes` (vague subject)
-✅ `feat: SA-123 Add user authentication` (correct)
+❌ `feat: Added new feature` (not imperative) ❌ `fix: Fix bug.` (period at end) ❌ `Update code` (missing type and ticket) ❌
+`feat: Did some changes` (vague subject) ✅ `feat: SA-123 Add user authentication` (correct)
 
 ## Git Commit Workflow
 
@@ -210,7 +224,9 @@ When user asks to commit changes:
 ## Special Cases
 
 ### Multiple Files Changed
+
 Group related changes in the body:
+
 ```
 feat: SA-123 Implement user authentication
 
@@ -222,7 +238,9 @@ Changes:
 ```
 
 ### Breaking Changes
+
 Use `!` after type:
+
 ```
 feat!: SA-456 Change API response format
 
@@ -231,7 +249,9 @@ Update clients accordingly.
 ```
 
 ### Scope Usage
+
 Use scope when changes affect specific area:
+
 ```
 fix(auth): SA-789 Prevent token expiration race condition
 
@@ -250,6 +270,7 @@ Adds mutex to prevent multiple threads from refreshing token simultaneously.
 ## Integration with Other Skills
 
 This skill is automatically used by:
+
 - **RightSize Checker**: When committing resource updates
 - **Deploy Config Generator**: When generating new configurations
 - **Dependency Updater**: When updating package versions
@@ -257,6 +278,7 @@ This skill is automatically used by:
 ## Validation
 
 Before committing, verify:
+
 - ✅ Type is one of: feat, fix, chore, refactor
 - ✅ Subject is in imperative mood
 - ✅ Subject has no period at end

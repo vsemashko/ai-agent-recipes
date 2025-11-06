@@ -1,10 +1,10 @@
 #!/usr/bin/env -S deno run --allow-all
 
 import { Command } from '@cliffy/command'
-import { syncCommand } from './commands/sync.ts'
-import { listCommand } from './commands/list.ts'
-import { convertCommand } from './commands/convert.ts'
-import { infoCommand } from './commands/info.ts'
+import { syncCommand } from './cli/commands/sync.ts'
+import { listCommand } from './cli/commands/list.ts'
+import { convertCommand } from './cli/commands/convert.ts'
+import { infoCommand } from './cli/commands/info.ts'
 
 const VERSION = '0.1.0'
 

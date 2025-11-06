@@ -25,7 +25,6 @@ npm-debug.log*
 
 # Deno specific
 .deno/
-deno.lock
 
 # Build outputs
 bin/

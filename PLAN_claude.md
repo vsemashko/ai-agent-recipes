@@ -2,9 +2,11 @@
 
 ## Project Overview
 
-**Goal**: Create a centralized repository for reusable configurations, instructions, prompts, skills, and tools for AI coding agents (Claude Code, Codex, GitHub Copilot, Cursor, etc.).
+**Goal**: Create a centralized repository for reusable configurations, instructions, prompts, skills, and tools for AI coding agents (Claude Code,
+Codex, GitHub Copilot, Cursor, etc.).
 
-**Vision**: A knowledge base and quick-start toolkit that teams can easily install and customize from their home folder, with seamless integration into existing workflows.
+**Vision**: A knowledge base and quick-start toolkit that teams can easily install and customize from their home folder, with seamless integration
+into existing workflows.
 
 **Repository**: https://gitlab.stashaway.com/vladimir.semashko/stashaway-agent-recipes
 
@@ -15,6 +17,7 @@
 ### ✅ Completed (Phase 1 + Refinements)
 
 **Core Infrastructure:**
+
 - [x] Repository structure set up
 - [x] Deno-based CLI with Cliffy framework
 - [x] Installation script (`install.sh`)
@@ -23,23 +26,27 @@
 - [x] All CLI code passes linting and formatting checks
 
 **CLI Commands:**
+
 - [x] `sync` - Unified install/update/sync command
 - [x] `list` - List available skills (working and tested)
 - [x] `convert` - Convert between skill formats
 - [x] `info` - Show installation information
 
 **Skills:**
+
 - [x] RightSize Checker skill (SKILL.md format)
 - [x] Commit Message Formatter skill (SKILL.md format)
 - [x] Skills follow single-file pattern (no README.md)
 
 **Documentation:**
+
 - [x] Comprehensive README.md
 - [x] CLAUDE.md for this repository
 - [x] AGENTS.md with specialized agents
 - [x] Skill documentation in SKILL.md format
 
 **Configuration:**
+
 - [x] Global-only approach (no project-specific templates)
 - [x] Claude Code global instructions
 - [x] Codex CLI global instructions
@@ -47,6 +54,7 @@
 ### 🔄 In Progress
 
 **Improvements Completed (Nov 2025):**
+
 - [x] Remove or repurpose `repo-init` command (no longer needed for global-only approach)
 - [x] Add hash tracking for user's existing global CLAUDE.md/AGENTS.md files
 - [x] Implement merge/override confirmation when syncing
@@ -56,12 +64,14 @@
 ### 📋 Remaining Tasks
 
 **Phase 2 Completion:**
+
 - [ ] Test full sync workflow with Claude Code
 - [ ] Test full sync workflow with Codex CLI
 - [ ] Verify hash tracking works correctly
 - [ ] Test merge/override flow
 
 **Phase 3-4 (Deferred):**
+
 - [ ] Cursor project-specific support (future enhancement)
 - [ ] Stash CLI integration
 - [ ] Update checking mechanism
@@ -71,18 +81,21 @@
 ### 🎯 Current Focus
 
 **Priority 1: Complete Global-Only Implementation**
+
 1. ✅ Simplify or remove `repo-init` command
 2. ✅ Add hash tracking for global files
 3. ✅ Implement smart merge/override logic
 4. ✅ Update documentation to emphasize global-only
 
 **Priority 2: Testing & Validation**
+
 1. Test installation on fresh environment
 2. Test sync with existing Claude Code setup
 3. Test sync with existing Codex setup
 4. Verify skills work in Claude Code
 
 **Priority 3: Polish**
+
 1. Add more example skills
 2. Improve error handling
 3. Add progress indicators
@@ -125,6 +138,7 @@ stashaway-agent-recipes/
 ```
 
 **Key Changes from Original Plan:**
+
 - ✅ Skills now use single-file `SKILL.md` format (no README.md)
 - ✅ Removed project-specific templates (global-only approach)
 - ✅ Added linter configuration to deno.json
@@ -142,11 +156,13 @@ stashaway-agent-recipes/
 #### Installation Methods
 
 **A. Quick Install (via curl)**
+
 ```bash
 curl https://agent-recipes.stashaway.internal | sh
 ```
 
 **B. From Source**
+
 ```bash
 git clone git@gitlab.stashaway.com:platform/stashaway-agent-recipes.git
 cd stashaway-agent-recipes
@@ -156,6 +172,7 @@ cd stashaway-agent-recipes
 #### Installation Behavior
 
 The installer will:
+
 1. Clone/download the repository to `~/.stashaway-agent-recipes/`
 2. Compile the CLI and place it in `~/.stashaway-agent-recipes/bin/`
 3. Add the bin directory to PATH (in `.zshrc`, `.bashrc`, etc.)
@@ -169,6 +186,7 @@ The installer will:
 **Note**: Cursor does not support global configuration. Project-specific automation is deferred until a future release.
 
 #### CLI Tool Name
+
 ```bash
 agent-recipes <command>
 # or shorter alias
@@ -197,6 +215,7 @@ agent-recipes version                 # Show current version
 ```
 
 **Design Philosophy**:
+
 - Single `sync` command handles install, update, and sync - idempotent and smart
 - Users don't need to think about whether to "install" or "update" - just run `sync`
 - First run detects no installation and performs full setup
@@ -214,11 +233,13 @@ stash agent sync                      # Install/update/sync agent-recipes (deleg
 ```
 
 **Implementation**:
+
 - Add `commands/agent/mod.ts` to stash CLI
 - Integrate update check into `checkForUpdatesIfNeeded()` in `lib/updates.ts`
 - Commands delegate to the `agent-recipes` CLI
 
 **Update Check Integration**:
+
 ```typescript
 // In lib/updates.ts
 async function checkForUpdatesIfNeeded() {
@@ -237,18 +258,21 @@ async function checkForUpdatesIfNeeded() {
 ### 4. Cross-Platform Compatibility
 
 #### Claude Code
+
 - **Scope**: Global instructions (initially)
 - **Location**: `~/.config/claude-code/` or as per Claude Code specification
 - **Files**: `CLAUDE.md`, `AGENTS.md`, skills folder
 - **Future**: Support repo-specific via `.claude/` directory
 
 #### Codex CLI
+
 - **Scope**: Global instructions (initially)
 - **Location**: `~/.codex/`
 - **Format**: May need conversion from Claude format
 - **Future**: Support repo-specific
 
 #### Cursor
+
 - **Scope**: **Project-specific ONLY** (no global config support)
 - **Location**: Per-repository `.cursor/rules/` directory
 - **Format**: `.mdc` files (Markdown Components) - new format as of 2025
@@ -256,9 +280,11 @@ async function checkForUpdatesIfNeeded() {
 - **Status**: ⏸️ **DEFERRED** - Project-specific support will be added in future phase
 - **Note**: Each project needs its own Cursor rules; global configuration not supported by Cursor IDE
 
-**Decision:** Since we're focusing on global-only configuration initially, Cursor support will be added later when we implement project-specific features.
+**Decision:** Since we're focusing on global-only configuration initially, Cursor support will be added later when we implement project-specific
+features.
 
 **Cursor .mdc Format** (for future reference):
+
 ```markdown
 ---
 name: stashaway-standards
@@ -277,12 +303,14 @@ description: StashAway coding standards and best practices
 **Decision:** Focus on global AI tool configuration first, defer project-specific support to later phase.
 
 **Rationale:**
+
 1. **Simpler MVP**: Global configuration is easier to implement and test
 2. **Broader Impact**: Global instructions benefit all projects immediately
 3. **User Feedback**: Can gather feedback before adding complexity
 4. **Cursor Limitation**: Cursor only supports project-specific config anyway
 
 **Impact:**
+
 - ✅ Removed all project-specific templates
 - ✅ Simplified sync workflow
 - ✅ Removed `repo-init` command (reintroduce when project-specific phase resumes)
@@ -295,12 +323,14 @@ description: StashAway coding standards and best practices
 **Decision:** Skills use single `SKILL.md` file instead of multi-file pattern with README.md.
 
 **Rationale:**
+
 1. **Simplicity**: Easier to create and maintain
 2. **Self-Contained**: All skill information in one place
 3. **Claude Code Compatible**: Follows Claude Code skill format
 4. **Easy Conversion**: Can still convert to other formats
 
 **Format:**
+
 ```markdown
 ---
 name: skill-name
@@ -310,12 +340,15 @@ description: Brief one-line description
 # Skill Name
 
 ## When to Use
+
 ...
 
 ## How It Works
+
 ...
 
 ## Example Usage
+
 ...
 ```
 
@@ -324,11 +357,13 @@ description: Brief one-line description
 **Decision:** Track hashes of user's global configuration files to detect changes.
 
 **Rationale:**
+
 1. **Non-Intrusive**: Don't override user customizations
 2. **Smart Merging**: Only prompt when files have changed
 3. **User Control**: Let user decide merge vs override
 
 **Implementation:** (To be added)
+
 - Store hash of last synced CLAUDE.md and AGENTS.md in config.json
 - Compare hashes on each sync
 - Prompt user if hashes don't match
@@ -353,7 +388,9 @@ description: Check if Kubernetes deployment resources match RightSize API recomm
 # RightSize Resource Checker
 
 ## When to Use
+
 Use this skill when you need to:
+
 - Check if a service's CPU/memory resources are appropriately sized
 - Update Kubernetes deployment configurations based on usage recommendations
 - Audit resource allocation across services
@@ -361,22 +398,26 @@ Use this skill when you need to:
 ## How It Works
 
 ### 1. Extract Project Information
+
 - Find `project_namespace` in `.gitlab-ci.yml` (under `include.inputs.project_namespace`)
 - Find app name from `fullnameOverride` in deploy folder (usually `/deploy/base/values.yaml`)
 
 ### 2. Query RightSize API
+
 For each region (sg, my, co.th, ae, hk):
 
 **CPU Recommendations:**
 ```
-GET https://rightsize-api.production.stashaway.{region}/resource-recommendation/cpu?app={app}&namespace={namespace}
-```
 
+GET https://rightsize-api.production.stashaway.{region}/resource-recommendation/cpu?app={app}&namespace={namespace}
+
+```
 **Memory Recommendations:**
 ```
-GET https://rightsize-api.production.stashaway.{region}/resource-recommendation/memory?app={app}&namespace={namespace}
-```
 
+GET https://rightsize-api.production.stashaway.{region}/resource-recommendation/memory?app={app}&namespace={namespace}
+
+````
 **Response Format:**
 ```json
 [
@@ -391,26 +432,31 @@ GET https://rightsize-api.production.stashaway.{region}/resource-recommendation/
     "limits": "null"
   }
 ]
-```
+````
 
 Note: API may return "null" as a string; treat it as actual null.
 
 ### 3. Check Deployment Resources
+
 Look for resource definitions in:
+
 - `/deploy/base/values.yaml` (base configuration)
 - `/deploy/{region}-{env}/values.yaml` (environment-specific overrides)
 
 Resource locations:
+
 - Main container: `resources.requests` and `resources.limits`
 - Istio sidecar: `istio.sidecar.resources.requests` and `istio.sidecar.resources.limits`
 
 ### 4. Compare and Recommend
+
 - Compare current values with recommendations
 - Allow rounding up recommendations
 - Keep existing settings if they're within 30% of recommendations
 - Flag resources that exceed recommendations by >30%
 
 ### 5. Update Resources and Commit Changes
+
 **This skill should automatically update files and commit changes** (not just recommend):
 
 1. **Update values.yaml files**:
@@ -480,8 +526,8 @@ Container: istio-proxy
 
 Recommendation: Update resources to match recommendations, would save approximately 40% of CPU allocation.
 ```
-```
 
+````
 ---
 
 ### Skill 2: Commit Message Formatter
@@ -504,10 +550,11 @@ Use this skill when creating git commits to ensure messages follow team standard
 ## Branch Naming Convention
 
 Branches should follow this format:
-```
-<type>/<ticket-number>-<short-description-in-kebab-case>
-```
+````
 
+<type>/<ticket-number>-<short-description-in-kebab-case>
+
+```
 **Examples**:
 - `feat/SA-604-add-execution-mode-to-kafka-topic`
 - `fix/SA-1234-prevent-xss-in-user-input`
@@ -520,8 +567,8 @@ Branches should follow this format:
 - User can skip providing ticket number if not applicable
 
 ## Commit Message Format
-
 ```
+
 <type><(optional scope)>: <ticket number> <subject>
 
 <body>
@@ -530,16 +577,20 @@ Branches should follow this format:
 ### Components
 
 #### Type (Required)
+
 - `feat` - New features that change behavior
 - `fix` - Bug fixes
 - `chore` - Package upgrades, version bumps, maintenance
 - `refactor` - Code refactors that do NOT change behavior
 
 #### Scope (Optional)
+
 Defines the domain/area of the system:
+
 - Examples: `(security)`, `(localisation)`, `(goals)`, `(auth)`
 
 #### Ticket Number (Recommended but Optional)
+
 - **Recommended**: Always include ticket number when available
 - **Optional**: Can be omitted if no ticket exists (e.g., minor fixes, experiments)
 - **GitLab tickets**: Use `#123` format
@@ -549,12 +600,14 @@ Defines the domain/area of the system:
 - **User prompt**: If not in branch name and not obvious, ask user (allow skip)
 
 **Examples without ticket number**:
+
 ```
 chore: Update README documentation
 fix: Correct typo in error message
 ```
 
 #### Subject (Required)
+
 - Describes WHAT the commit does (not why or how)
 - Written in imperative mood: "Add feature" not "Added feature" or "Adds feature"
 - Concise and clear
@@ -562,6 +615,7 @@ fix: Correct typo in error message
 - No period at the end
 
 #### Body (Optional)
+
 - Explains WHY or HOW
 - Required only if context isn't clear from subject/ticket/code
 - Can use any format (paragraphs, bullets, etc.)
@@ -570,6 +624,7 @@ fix: Correct typo in error message
 ## Examples
 
 ### Example 1: Feature with multiple changes
+
 ```
 feat: SA-604 Improve slack events listening node
 
@@ -578,6 +633,7 @@ feat: SA-604 Improve slack events listening node
 ```
 
 ### Example 2: Bug fix
+
 ```
 fix: SA-1234 Prevent XSS in user input fields
 
@@ -586,6 +642,7 @@ Added DOMPurify for client-side sanitization.
 ```
 
 ### Example 3: Refactor
+
 ```
 feat: SA-456 Extract auth logic into separate service
 
@@ -594,6 +651,7 @@ to improve testability and reusability.
 ```
 
 ### Example 4: Chore
+
 ```
 chore: #789 Upgrade dependencies to latest versions
 
@@ -602,11 +660,13 @@ handled in separate PRs.
 ```
 
 ### Example 5: Without ticket number
+
 ```
 chore: Update README with installation instructions
 ```
 
 ### Example 6: Branch name with ticket
+
 ```
 Branch: feat/SA-604-add-kafka-topic-env
 Commit: feat: SA-604 Add execution mode to kafka topic
@@ -633,6 +693,7 @@ When the user asks to create a commit or commit message:
 8. Present to user for approval
 
 **Workflow Example**:
+
 ```
 Agent: I'll create a commit message for these changes.
 [Checks branch: feat/SA-604-add-kafka-topic-env]
@@ -651,13 +712,10 @@ Proceed with this commit? (yes/no)
 
 ## Anti-patterns to Avoid
 
-❌ `feat: Added new feature` (not imperative)
-❌ `fix: Fix bug.` (period at end)
-❌ `Update code` (missing type and ticket)
-❌ `feat: Did some changes` (vague subject)
-✅ `feat: SA-123 Add user authentication` (correct)
-```
+❌ `feat: Added new feature` (not imperative) ❌ `fix: Fix bug.` (period at end) ❌ `Update code` (missing type and ticket) ❌
+`feat: Did some changes` (vague subject) ✅ `feat: SA-123 Add user authentication` (correct)
 
+````
 ---
 
 ## Conversion System
@@ -676,15 +734,17 @@ description: Check if Kubernetes deployment resources match RightSize API recomm
 ---
 
 [Skill content...]
-```
+````
 
 **Output**: Entry in AGENTS.md:
+
 ```markdown
 ## rightsize
 
 Check if Kubernetes deployment resources match RightSize API recommendations
 
 ### Usage
+
 Use this skill by invoking: `/rightsize` or mentioning "rightsize" in your request.
 
 [Additional instructions from skill content if relevant...]
@@ -726,6 +786,7 @@ agent-recipes convert batch ./skills --output ./instructions/claude-code/AGENTS.
 **Purpose**: Explain how to work with the stashaway-agent-recipes repository itself.
 
 **Content**:
+
 - Project structure and organization
 - How to add new skills
 - How to test skills locally
@@ -739,6 +800,7 @@ agent-recipes convert batch ./skills --output ./instructions/claude-code/AGENTS.
 **Purpose**: Define agents available for working on this repository.
 
 **Content**:
+
 - Skill converter agent
 - Installation script tester agent
 - Cross-platform compatibility checker
@@ -747,11 +809,13 @@ agent-recipes convert batch ./skills --output ./instructions/claude-code/AGENTS.
 ### Feature Parity Strategy
 
 **Maintain consistency between**:
+
 - Claude Code format (CLAUDE.md + AGENTS.md)
 - Codex format (custom JSON/config)
 - Cursor format (.cursorrules)
 
 **Process**:
+
 1. Master source: Claude Code format
 2. Automatic conversion to other formats via `convert` command
 3. CI/CD check to ensure formats stay in sync
@@ -762,6 +826,7 @@ agent-recipes convert batch ./skills --output ./instructions/claude-code/AGENTS.
 ## Implementation Phases
 
 ### Phase 1: Foundation ✅ COMPLETED
+
 - [x] Set up repository structure
 - [x] Create basic CLI with Deno + Cliffy
 - [x] Implement `install.sh` script
@@ -772,6 +837,7 @@ agent-recipes convert batch ./skills --output ./instructions/claude-code/AGENTS.
 - [x] Fix all linting issues
 
 **Additional Improvements:**
+
 - [x] Repository URL updated to vladimir.semashko/stashaway-agent-recipes
 - [x] All code formatted with deno fmt
 - [x] Skills renamed to SKILL.md format
@@ -779,6 +845,7 @@ agent-recipes convert batch ./skills --output ./instructions/claude-code/AGENTS.
 - [x] Removed project-specific templates
 
 ### Phase 2: Skills Implementation ✅ MOSTLY COMPLETED
+
 - [x] Implement Rightsize skill
   - [x] Skill definition and instructions
   - [ ] API client for RightSize (instructions in SKILL.md)
@@ -796,6 +863,7 @@ agent-recipes convert batch ./skills --output ./instructions/claude-code/AGENTS.
 **Note:** Skills are defined as instructions for AI agents, not as executable code.
 
 ### Phase 3: CLI Commands ✅ MOSTLY COMPLETED
+
 - [x] Implement unified `sync` command (replaces install/update)
 - [x] Implement `list` command (working and tested)
 - [x] Implement `convert` command
@@ -807,6 +875,7 @@ agent-recipes convert batch ./skills --output ./instructions/claude-code/AGENTS.
 - [x] Write command documentation
 
 ### Phase 4: Cross-Platform Support 🔄 IN PROGRESS
+
 - [x] Research Codex CLI format requirements
 - [x] Research Cursor format requirements (2025 .mdc format)
 - [x] Implement format converters
@@ -821,6 +890,7 @@ agent-recipes convert batch ./skills --output ./instructions/claude-code/AGENTS.
 **Scope Change:** Focusing on global-only configuration initially. Project-specific support (especially Cursor) deferred to future phase.
 
 ### Phase 5: Stash CLI Integration ⏸️ DEFERRED
+
 - [ ] Add `commands/agent/` to stash CLI
 - [ ] Implement delegation to agent-recipes CLI
 - [ ] Integrate update checking
@@ -830,6 +900,7 @@ agent-recipes convert batch ./skills --output ./instructions/claude-code/AGENTS.
 **Status:** Deferred until core functionality is stable and tested.
 
 ### Phase 6: Meta Documentation ✅ COMPLETED
+
 - [x] Write CLAUDE.md for this repo
 - [x] Write AGENTS.md for this repo
 - [x] Create contribution guidelines (in README.md)
@@ -837,6 +908,7 @@ agent-recipes convert batch ./skills --output ./instructions/claude-code/AGENTS.
 - [ ] Create examples and tutorials
 
 ### Phase 7: Polish & Release ⏸️ FUTURE
+
 - [ ] Set up CI/CD pipeline
 - [ ] Create release process
 - [ ] Write migration guide for existing setups
@@ -852,23 +924,28 @@ agent-recipes convert batch ./skills --output ./instructions/claude-code/AGENTS.
 ## Technical Decisions
 
 ### Language & Framework
+
 - **Runtime**: Deno 2.x (same as stash CLI)
 - **CLI Framework**: Cliffy (same as stash CLI)
 - **Reasons**: Consistency with existing tools, good TypeScript support
 
 ### Installation Location
+
 - **Default**: `~/.stashaway-agent-recipes/`
 - **Configurable**: Via `AGENT_RECIPES_HOME` environment variable
 - **Binary**: `~/.stashaway-agent-recipes/bin/agent-recipes`
 
 ### Update Mechanism
+
 - **Check frequency**: Daily (first run of the day)
 - **Update source**: GitLab package registry (similar to stash)
 - **Version file**: `release-latest.txt` in repository root
 
 ### Configuration Storage
+
 - **Global config**: `~/.stashaway-agent-recipes/config.json`
 - **Format**:
+
 ```json
 {
   "version": "1.0.0",
@@ -886,6 +963,7 @@ agent-recipes convert batch ./skills --output ./instructions/claude-code/AGENTS.
 ## Testing Strategy
 
 ### Manual Testing
+
 - Install on fresh machine
 - Test with each AI tool (Claude Code, Codex, Cursor)
 - Verify skills work as expected
@@ -896,6 +974,7 @@ agent-recipes convert batch ./skills --output ./instructions/claude-code/AGENTS.
 ## Success Criteria
 
 ### For Users
+
 - ✅ Can install with one command
 - ✅ Instructions automatically available in AI tools
 - ✅ Skills work out of the box
@@ -903,6 +982,7 @@ agent-recipes convert batch ./skills --output ./instructions/claude-code/AGENTS.
 - ✅ Clear documentation and examples
 
 ### For Maintainers
+
 - ✅ Easy to add new skills
 - ✅ Format conversions are automatic
 - ✅ CI ensures quality
@@ -910,6 +990,7 @@ agent-recipes convert batch ./skills --output ./instructions/claude-code/AGENTS.
 - ✅ Version management is smooth
 
 ### For Organization
+
 - ✅ Consistent AI assistance across projects
 - ✅ Best practices are codified
 - ✅ Knowledge is centralized
@@ -921,18 +1002,21 @@ agent-recipes convert batch ./skills --output ./instructions/claude-code/AGENTS.
 ## Future Enhancements
 
 ### Short Term
+
 - Additional skills (security scanning, documentation generation, etc.)
 - Web dashboard for browsing skills
 - Telemetry for skill usage
 - Auto-update on new skill releases
 
 ### Medium Term
+
 - Repo-specific skill customization
 - Skill marketplace/sharing
 - AI-assisted skill creation
 - Integration with GitLab CI for automated checks
 
 ### Long Term
+
 - Multi-organization support
 - Skill composition (combining multiple skills)
 - AI model fine-tuning based on skill usage
@@ -943,16 +1027,19 @@ agent-recipes convert batch ./skills --output ./instructions/claude-code/AGENTS.
 ## Resources & References
 
 ### Related Documentation
+
 - Claude Code documentation: https://docs.claude.com/claude-code
 - Cursor rules documentation: [Cursor docs]
 - Codex CLI documentation: [Codex docs]
 - Stash CLI: `/Users/vladimir.semashko/repo/stashaway/stuff/stash`
 
 ### Example Repositories
+
 - temporal-ts-general-worker: `/Users/vladimir.semashko/repo/stashaway/temporal/temporal-ts-general-worker`
 - funding-server: `/Users/vladimir.semashko/repo/stashaway/funding-server`
 
 ### APIs
+
 - RightSize API: `https://rightsize-api.production.stashaway.{region}/resource-recommendation/{resource}?app={app}&namespace={namespace}`
 - GitLab API: `https://gitlab.stashaway.com/api/v4`
 
@@ -981,11 +1068,9 @@ agent-recipes convert batch ./skills --output ./instructions/claude-code/AGENTS.
 
 ## Contact & Support
 
-**Project Owner**: [To be assigned]
-**Slack Channel**: #agent-recipes (to be created)
-**Issue Tracker**: GitLab issues
-**Documentation**: Repository README and wiki
+**Project Owner**: [To be assigned] **Slack Channel**: #agent-recipes (to be created) **Issue Tracker**: GitLab issues **Documentation**: Repository
+README and wiki
 
 ---
 
-*This plan is a living document and should be updated as the project evolves.*
+_This plan is a living document and should be updated as the project evolves._
