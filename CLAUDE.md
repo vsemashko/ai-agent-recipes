@@ -4,8 +4,8 @@ This file contains instructions for working on the StashAway Agent Recipes repos
 
 ## Repository Overview
 
-**Repository**: stashaway-agent-recipes
-**Purpose**: Centralized repository for reusable AI agent configurations, instructions, skills, and tools for StashAway engineering teams.
+**Repository**: stashaway-agent-recipes **Purpose**: Centralized repository for reusable AI agent configurations, instructions, skills, and tools for
+StashAway engineering teams.
 
 ## Project Structure
 
@@ -79,12 +79,15 @@ deno task build
    # My Skill
 
    ## When to Use
+
    [When should this skill be invoked?]
 
    ## How It Works
+
    [Detailed implementation instructions]
 
    ## Example Usage
+
    [Example interactions]
    ```
 
@@ -139,12 +142,14 @@ The installation logic is in `cli/lib/installer.ts`. Key methods:
 - `pullLatestChanges()`: Pull latest changes from origin
 
 **Update Mechanism:**
+
 - Installation directory is a git repository
 - `checkForUpdates()` fetches from origin and compares commits
 - `pullLatestChanges()` does a hard reset to `origin/main` (or `origin/master`)
 - Supports both `main` and `master` as default branches
 
 When modifying:
+
 1. Preserve backward compatibility
 2. Test on fresh install
 3. Test on update scenario
@@ -178,6 +183,7 @@ deno coverage coverage
 ## Skill Format Specification
 
 ### Frontmatter (Required)
+
 ```yaml
 ---
 name: skill-name        # Lowercase, hyphenated
@@ -186,6 +192,7 @@ description: Brief one-line description
 ```
 
 ### Content Sections (Recommended)
+
 1. **When to Use**: Trigger conditions
 2. **How It Works**: Step-by-step process
 3. **Example Usage**: Sample interactions
@@ -195,16 +202,19 @@ description: Brief one-line description
 ## Platform-Specific Notes
 
 ### Claude Code
+
 - Instructions go to `~/.config/claude-code/CLAUDE.md`
 - Skills symlinked from repository `skills/` directory
 - Uses CLAUDE.md + skills/ format (NOT AGENTS.md)
 
 ### Codex CLI
+
 - AGENTS.md auto-generated and synced to `~/.codex/AGENTS.md`
 - Generated from all skills during sync
 - Uses markdown format (AGENTS.md)
 
 ### Cursor
+
 - **Status**: Support deferred to future release
 - Project-specific only (no global config)
 - Uses `.cursor/rules/*.mdc` format
@@ -212,8 +222,8 @@ description: Brief one-line description
 ## Release Process
 
 1. **Update version**:
-   - Update version in `cli/deno.json`
-   - Update VERSION constant in `cli/main.ts`
+   - Update version in `deno.json`
+   - Update VERSION constant in `main.ts`
 
 2. **Test thoroughly**:
    - Test installation from scratch
@@ -233,7 +243,9 @@ description: Brief one-line description
 ## Troubleshooting
 
 ### Deno Permission Errors
+
 Add necessary permissions to command:
+
 ```bash
 deno run --allow-read --allow-write --allow-env --allow-run main.ts
 ```
@@ -241,13 +253,16 @@ deno run --allow-read --allow-write --allow-env --allow-run main.ts
 Or use `--allow-all` for development.
 
 ### Import Errors
+
 Ensure using JSR imports:
+
 ```typescript
-import { Command } from '@cliffy/command'  // ✅ Correct
-import { Command } from 'https://deno.land/x/cliffy'  // ❌ Old style
+import { Command } from '@cliffy/command' // ✅ Correct
+import { Command } from 'https://deno.land/x/cliffy' // ❌ Old style
 ```
 
 ### Build Errors
+
 ```bash
 cd cli
 rm -rf dist/
@@ -265,20 +280,25 @@ deno task build
 ## Important Conventions
 
 ### Branch Naming
+
 ```
 <type>/<ticket>-<description>
 ```
+
 Example: `feat/SA-123-add-new-skill`
 
 ### Commit Messages
+
 ```
 <type>: <ticket> <subject>
 
 <body>
 ```
+
 Example: `feat: SA-123 Add database migration skill`
 
 ### Skill Naming
+
 - Lowercase with hyphens
 - Descriptive and concise
 - Example: `rightsize`, `commit-message`, `db-migration`
@@ -299,6 +319,7 @@ Example: `feat: SA-123 Add database migration skill`
 ## Architecture Decisions
 
 ### Why Deno?
+
 - TypeScript native
 - Secure by default (explicit permissions)
 - Modern standard library
@@ -306,21 +327,24 @@ Example: `feat: SA-123 Add database migration skill`
 - Consistency with stash CLI
 
 ### Why Cliffy?
+
 - Excellent TypeScript support
 - Rich features (prompts, tables, colors)
 - Well-maintained
 - Used by stash CLI
 
 ### Why Multiple Formats?
+
 Different AI tools use different formats. We maintain Claude Code format as the source of truth and convert to other formats as needed.
 
 ## Future Enhancements
 
 See PLAN_claude.md for:
+
 - Short-term enhancements
 - Medium-term features
 - Long-term vision
 
 ---
 
-*This repository is the foundation for standardized AI assistance across StashAway engineering.*
+_This repository is the foundation for standardized AI assistance across StashAway engineering._

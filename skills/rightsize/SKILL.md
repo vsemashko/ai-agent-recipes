@@ -8,6 +8,7 @@ description: Check if Kubernetes deployment resources match RightSize API recomm
 ## When to Use
 
 Use this skill when you need to:
+
 - Check if a service's CPU/memory resources are appropriately sized
 - Update Kubernetes deployment configurations based on usage recommendations
 - Audit resource allocation across services
@@ -25,16 +26,19 @@ Use this skill when you need to:
 For each region (sg, my, co.th, ae, hk):
 
 **CPU Recommendations:**
+
 ```
 GET https://rightsize-api.production.stashaway.{region}/resource-recommendation/cpu?app={app}&namespace={namespace}
 ```
 
 **Memory Recommendations:**
+
 ```
 GET https://rightsize-api.production.stashaway.{region}/resource-recommendation/memory?app={app}&namespace={namespace}
 ```
 
 **Response Format:**
+
 ```json
 [
   {
@@ -55,10 +59,12 @@ GET https://rightsize-api.production.stashaway.{region}/resource-recommendation/
 ### 3. Check Deployment Resources
 
 Look for resource definitions in:
+
 - `/deploy/base/values.yaml` (base configuration)
 - `/deploy/{region}-{env}/values.yaml` (environment-specific overrides)
 
 Resource locations:
+
 - Main container: `resources.requests` and `resources.limits`
 - Istio sidecar: `istio.sidecar.resources.requests` and `istio.sidecar.resources.limits`
 

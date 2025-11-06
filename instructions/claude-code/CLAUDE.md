@@ -1,12 +1,14 @@
 # StashAway Global Instructions for Claude Code
 
-**Important:** This file uses managed sections. Content above the managed section marker is yours and will never be modified. The section below is automatically updated when you run `agent-recipes sync`.
+**Important:** This file uses managed sections. Content above the managed section marker is yours and will never be modified. The section below is
+automatically updated when you run `agent-recipes sync`.
 
 ## Coding Standards
 
 ### Branch Naming & Commit Messages
 
-For branch naming conventions and commit message formatting, use the **sa_commit-message** skill. This skill will guide you through proper formatting following StashAway standards.
+For branch naming conventions and commit message formatting, use the **sa_commit-message** skill. This skill will guide you through proper formatting
+following StashAway standards.
 
 ### Code Quality
 
@@ -43,4 +45,4 @@ To use a skill, simply ask about the task naturally (e.g., "Can you check if thi
 
 ---
 
-*This section is managed by agent-recipes. To customize these instructions, edit content above the managed section marker.*
+_This section is managed by agent-recipes. To customize these instructions, edit content above the managed section marker._

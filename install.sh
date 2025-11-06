@@ -63,7 +63,7 @@ echo "   Installation directory: $agent_recipes_home"
 echo ""
 
 # Check if we're running from the cloned repo
-if [ -f "$(pwd)/cli/main.ts" ]; then
+if [ -f "$(pwd)/main.ts" ]; then
   echo "✓ Running from repository directory"
   repo_dir="$(pwd)"
 else
@@ -83,7 +83,7 @@ fi
 # Build the CLI
 echo ""
 echo "🔨 Building CLI..."
-cd "$repo_dir/cli"
+cd "$repo_dir"
 deno compile --allow-all --output="$bin_dir/agent-recipes" main.ts
 
 if [ ! -f "$bin_dir/agent-recipes" ]; then

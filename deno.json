@@ -4,7 +4,7 @@
   "exports": "./main.ts",
   "tasks": {
     "dev": "deno run --allow-all main.ts",
-    "build": "deno compile --allow-all --output=../bin/agent-recipes main.ts",
+    "build": "deno compile --allow-all --output=bin/agent-recipes main.ts",
     "install": "deno install --allow-all --name=agent-recipes --force main.ts",
     "lint": "deno lint",
     "fmt": "deno fmt",
@@ -27,7 +27,7 @@
   },
   "fmt": {
     "useTabs": false,
-    "lineWidth": 100,
+    "lineWidth": 150,
     "indentWidth": 2,
     "semiColons": false,
     "singleQuote": true

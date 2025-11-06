@@ -1,6 +1,7 @@
 # Contributing to StashAway Agent Recipes
 
-Thank you for contributing to the StashAway Agent Recipes repository! This guide will help you understand how to add new skills, modify the CLI, and contribute to the project.
+Thank you for contributing to the StashAway Agent Recipes repository! This guide will help you understand how to add new skills, modify the CLI, and
+contribute to the project.
 
 ## Table of Contents
 
@@ -90,6 +91,7 @@ description: Brief one-line description of what this skill does
 ## When to Use
 
 Describe when this skill should be invoked. Include:
+
 - Trigger conditions
 - Use cases
 - When NOT to use this skill
@@ -99,23 +101,22 @@ Describe when this skill should be invoked. Include:
 Provide step-by-step instructions for the AI agent:
 
 ### 1. First Step
+
 Detailed instructions for the first step
 
 ### 2. Second Step
+
 Detailed instructions for the second step
 
 ### 3. Third Step
+
 And so on...
 
 ## Example Usage
 
 Show example interactions:
 
-\`\`\`
-User: Can you do [task]?
-Agent: I'll use the my-skill skill to accomplish this.
-[Agent follows the steps...]
-\`\`\`
+\`\`\` User: Can you do [task]? Agent: I'll use the my-skill skill to accomplish this. [Agent follows the steps...] \`\`\`
 
 ## Output Format
 
@@ -204,6 +205,7 @@ The installation logic is in `cli/lib/installer.ts`. Key methods:
 - `addToPath()`: Add CLI to system PATH
 
 **Important:**
+
 - Preserve backward compatibility
 - Test on fresh install
 - Test on update scenario
@@ -316,6 +318,7 @@ Follow the StashAway convention:
 ```
 
 **Examples:**
+
 - `feat/SA-604-add-new-skill`
 - `fix/SA-1234-fix-sync-issue`
 - `chore/SA-789-update-deps`
@@ -331,6 +334,7 @@ Follow the StashAway format:
 ```
 
 **Example:**
+
 ```
 feat: SA-123 Add database migration skill
 
@@ -376,6 +380,7 @@ Adds a new skill to help with database migrations:
 ### Deno Permission Errors
 
 Add necessary permissions:
+
 ```bash
 deno run --allow-read --allow-write --allow-env --allow-run main.ts
 # Or for development:
@@ -385,9 +390,10 @@ deno run --allow-all main.ts
 ### Import Errors
 
 Ensure using JSR imports:
+
 ```typescript
-import { Command } from '@cliffy/command'  // ✅ Correct
-import { Command } from 'https://deno.land/x/cliffy'  // ❌ Old style
+import { Command } from '@cliffy/command' // ✅ Correct
+import { Command } from 'https://deno.land/x/cliffy' // ❌ Old style
 ```
 
 ### Build Errors
@@ -413,4 +419,4 @@ deno task build
 
 ---
 
-*Thank you for contributing to StashAway Agent Recipes!*
+_Thank you for contributing to StashAway Agent Recipes!_
