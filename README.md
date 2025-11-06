@@ -1,22 +1,14 @@
 # StashAway Agent Recipes
 
-A centralized repository for reusable configurations, instructions, prompts, skills, and tools for AI coding agents (Claude Code, Codex CLI, and more).
+A centralized repository for reusable configurations, instructions, and skills for AI coding agents (Claude Code, Codex CLI, and more).
 
 ## 🎯 What is This?
 
-Agent Recipes is a knowledge base and quick-start toolkit that makes it easy to:
+Agent Recipes makes it easy to:
 - 🤖 Configure AI coding assistants with StashAway's standards and best practices
 - 🔧 Share reusable skills across your team
 - 📚 Maintain consistent AI agent behavior across projects
 - 🚀 Get new team members productive with AI tools quickly
-
-## ✨ Features
-
-- **One-Command Installation**: Get started in seconds
-- **Cross-Platform**: Works with Claude Code and Codex CLI
-- **Pre-built Skills**: RightSize checker, commit message formatter, and more
-- **CLI Tool**: Easy management and synchronization
-- **Global Instructions**: Keep Claude Code and Codex CLI in sync automatically
 
 ## 🚀 Quick Start
 
@@ -44,207 +36,119 @@ source ~/.zshrc  # or ~/.bashrc
 agent-recipes sync
 ```
 
-The CLI tracks previously installed versions and will prompt before overwriting any changes you make to your global configuration files.
+The CLI will prompt before overwriting any local changes.
 
-## 📦 Available Skills
+## 💻 Usage
 
-### RightSize Checker
-Automatically check if Kubernetes resources are appropriately sized based on actual usage.
-
-**Usage**: Ask Claude "Can you check if this service is rightsized?"
-
-**What it does**:
-- Queries RightSize API for CPU/memory recommendations
-- Compares with current deployment configurations
-- Updates values.yaml files with optimized resources
-- Creates a commit with the changes
-
-### Commit Message Formatter
-Generate properly formatted commit messages following StashAway conventions.
-
-**Usage**: Ask Claude "Create a commit for these changes"
-
-**What it does**:
-- Analyzes your git changes
-- Extracts ticket number from branch name
-- Generates properly formatted commit message
-- Follows type conventions (feat, fix, chore, refactor)
-
-## 💻 CLI Commands
+### Available Commands
 
 ```bash
-# Core commands
 agent-recipes sync           # Install/update/sync everything
 agent-recipes list           # List available skills
 agent-recipes info           # Show installation info
+```
 
-# For maintainers
-agent-recipes convert <path> # Convert skill formats
+### Using Skills
+
+Skills provide specialized guidance for common StashAway workflows. Browse available skills in the `skills/` directory:
+
+- **rightsize** - Check and optimize Kubernetes resource allocations
+- **commit-message** - Generate properly formatted commit messages
+
+To use a skill, simply ask Claude naturally:
+```
+"Can you check if this service is rightsized?"
+"Create a commit for these changes"
 ```
 
 ## 🛠️ Supported AI Tools
 
 ### Claude Code
-- **Scope**: Global instructions
 - **Location**: `~/.config/claude-code/`
+- **Format**: Global instructions (CLAUDE.md) + skills directory
 - **Setup**: Automatic via `agent-recipes sync`
-- **Protection**: Sync prompts before overwriting your local edits
 
 ### Codex CLI
-- **Scope**: Global instructions
 - **Location**: `~/.codex/`
+- **Format**: Auto-generated AGENTS.md from global instructions + skills
 - **Setup**: Automatic via `agent-recipes sync`
-- **Format**: Auto-generates `AGENTS.md` from skills
-- **Protection**: Sync prompts before overwriting your local edits
 
 ### Cursor
 - **Status**: Coming in a future release
 - **Note**: Cursor only supports project-specific configuration
 
-## 📖 Usage Examples
-
-### Checking Resource Sizing
-
-```bash
-# In any StashAway service repository
-# Just ask Claude:
-"Can you check if this service is rightsized?"
-
-# Claude will:
-# 1. Find the service name and namespace
-# 2. Query RightSize API for all regions
-# 3. Compare with current configs
-# 4. Show recommendations
-# 5. Offer to update files and commit
-```
-
-### Creating Commits
-
-```bash
-# After making changes
-# Ask Claude:
-"Create a commit for these changes"
-
-# Claude will:
-# 1. Analyze git diff
-# 2. Extract ticket number from branch name
-# 3. Generate formatted commit message
-# 4. Ask for your approval
-```
-
 ## 🔄 Keeping Up to Date
 
-The CLI automatically checks for updates when you run `agent-recipes sync`:
+The CLI automatically checks for updates:
 
 ```bash
 # Check for updates and sync instructions
 agent-recipes sync
-# If updates are available, you'll see:
-#   📦 New version available!
-#   Current: abc1234
-#   Latest:  def5678
-#   Run `agent-recipes sync --force` to update
 
 # Update to latest version and re-sync everything
 agent-recipes sync --force
-# This will:
-# - Pull latest changes from the repository
-# - Update all skills and instructions
-# - Re-sync to your AI tools
 ```
 
 **How it works:**
-- The CLI is installed as a git repository in `~/.stashaway-agent-recipes/`
-- Running `sync` checks if the remote `main` branch has new commits
-- Using `--force` performs a hard reset to the latest remote version
-- Instructions and skills are automatically re-synced after updates
-
-## 🤝 Contributing
-
-We welcome contributions! To add a new skill or improve existing ones, see our [Contributing Guide](./CONTRIBUTING.md).
-
-Quick overview:
-1. Fork the repository
-2. Create a feature branch following naming convention: `<type>/<ticket>-<description>`
-3. Add your skill or improvements
-4. Test with multiple AI tools
-5. Submit a merge request
-
-For detailed development instructions, see [CONTRIBUTING.md](./CONTRIBUTING.md).
+- Installed as a git repository in `~/.stashaway-agent-recipes/`
+- `sync` checks if remote has new commits
+- `--force` pulls latest changes and re-syncs everything
+- Instructions and skills are automatically updated
 
 ## 📁 What Gets Installed?
 
-When you run `agent-recipes sync`, the following happens:
-
 ### For Claude Code Users
-- Global instructions synced to `~/.config/claude-code/CLAUDE.md`
-- Skills directory linked to `~/.config/claude-code/skills/`
-- Your existing edits are detected and you're prompted before overwriting
+- Global instructions → `~/.config/claude-code/CLAUDE.md`
+- Skills directory → `~/.config/claude-code/skills/` (symlinked)
 
 ### For Codex CLI Users
-- `AGENTS.md` auto-generated from all skills to `~/.codex/AGENTS.md`
-- Includes all skill instructions and metadata
-- Your existing edits are detected and you're prompted before overwriting
+- Combined file → `~/.codex/AGENTS.md` (auto-generated from instructions + skills)
 
 ### CLI Tool
 - Installed to `~/.stashaway-agent-recipes/`
-- Binary available at `~/.stashaway-agent-recipes/bin/agent-recipes`
+- Binary at `~/.stashaway-agent-recipes/bin/agent-recipes`
 - Added to your PATH automatically
+
+## 🤝 Contributing
+
+We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for:
+- How to add new skills
+- Development setup
+- Testing guidelines
+- Code style guide
+
+Quick overview:
+1. Create a feature branch: `<type>/<ticket>-<description>`
+2. Add your skill in `skills/my-skill/SKILL.md`
+3. Test with `agent-recipes sync`
+4. Submit a merge request
 
 ## 🐛 Troubleshooting
 
 ### CLI not found after installation
 ```bash
-# Restart your shell
 source ~/.zshrc  # or ~/.bashrc
-
 # Or manually add to PATH
 export PATH="$PATH:$HOME/.stashaway-agent-recipes/bin"
 ```
 
-### Deno not installed
-```bash
-curl -fsSL https://deno.land/install.sh | sh
-```
-
-### Permission errors
-```bash
-chmod +x ~/.stashaway-agent-recipes/bin/agent-recipes
-```
-
 ### Skills not showing up in Claude Code
 ```bash
-# Re-sync
 agent-recipes sync
-
-# Check if skills directory exists
 ls ~/.config/claude-code/skills/
 ```
 
 ### AGENTS.md not updating for Codex
 ```bash
-# Force regenerate
 agent-recipes sync --force
-
-# Check the generated file
 cat ~/.codex/AGENTS.md
 ```
-
-## 📚 Additional Resources
-
-- [CONTRIBUTING.md](./CONTRIBUTING.md) - Development and contribution guide
-- [PLAN_claude.md](./PLAN_claude.md) - Detailed implementation plan
-- [Claude Code Documentation](https://docs.claude.com/claude-code)
-
-## 📄 License
-
-Internal StashAway tool - not for external distribution
 
 ## 🙋 Support
 
 - **Slack**: #agent-recipes (to be created)
 - **Issues**: [GitLab Issues](https://gitlab.stashaway.com/vladimir.semashko/stashaway-agent-recipes/-/issues)
-- **Documentation**: This README and [CONTRIBUTING.md](./CONTRIBUTING.md)
+- **Documentation**: [CONTRIBUTING.md](./CONTRIBUTING.md) for development details
 
 ---
 

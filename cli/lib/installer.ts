@@ -201,8 +201,10 @@ export class Installer {
     const targetPath = join(this.homeDir, '.codex')
     await Deno.mkdir(targetPath, { recursive: true })
 
-    // Auto-generate AGENTS.md from skills
+    // Auto-generate AGENTS.md from CLAUDE.md + skills
+    const claudeMdPath = join(repoRoot, 'instructions', 'claude-code', 'CLAUDE.md')
     const skillsDir = join(repoRoot, 'skills')
+
     if (!await exists(skillsDir)) {
       console.log('ℹ No skills found to sync for Codex')
       return
@@ -213,7 +215,18 @@ export class Installer {
     const { batchConvertSkills } = await import(converterPath)
 
     try {
-      console.log('  ⚙️  Generating AGENTS.md from skills...')
+      console.log('  ⚙️  Generating AGENTS.md from global instructions + skills...')
+
+      // Read CLAUDE.md if it exists to include as header
+      let header = '# AI Agent Skills for StashAway\n\nThis file is auto-generated from the stashaway-agent-recipes repository.\n\n'
+
+      if (await exists(claudeMdPath)) {
+        const claudeMdContent = await Deno.readTextFile(claudeMdPath)
+        // Add CLAUDE.md content as the introduction
+        header += '---\n\n' + claudeMdContent + '\n\n---\n\n# Available Skills\n\n'
+      }
+
+      // Convert all skills
       const results = await batchConvertSkills(skillsDir, 'agent-md')
 
       if (results.length === 0) {
@@ -221,24 +234,21 @@ export class Installer {
         return
       }
 
-      // Create AGENTS.md header
-      const header = `# AI Agent Skills for StashAway\n\nThis file is auto-generated from the stashaway-agent-recipes repository.\n\n`
+      // Combine header + skills
       const combined = header + results.map((r) => r.output).join('\n\n---\n\n')
 
-      // Write to target
+      // Write to target with hash tracking
       const targetFile = join(targetPath, 'AGENTS.md')
-      const currentHash = await exists(targetFile)
-        ? await this.computeHash(await Deno.readTextFile(targetFile))
-        : ''
-      const newHash = await this.computeHash(combined)
+      await this.syncFileWithHash(
+        'generated', // Source is generated, not a file
+        targetFile,
+        config,
+        'codex/AGENTS.md',
+        'Codex AGENTS.md',
+        combined  // Pass content directly
+      )
 
-      if (currentHash === newHash) {
-        console.log('  ✓ Codex AGENTS.md is already up to date')
-      } else {
-        await Deno.writeTextFile(targetFile, combined)
-        config.fileHashes!['codex/AGENTS.md'] = newHash
-        console.log(`  ✓ Generated AGENTS.md with ${results.length} skill(s)`)
-      }
+      console.log(`  ✓ Generated AGENTS.md with global instructions + ${results.length} skill(s)`)
     } catch (error) {
       console.error('  ⚠ Failed to generate AGENTS.md:', error.message)
     }
@@ -250,16 +260,23 @@ export class Installer {
     config: InstallConfig,
     hashKey: string,
     description: string,
+    generatedContent?: string  // Optional: pass content directly instead of reading from file
   ): Promise<void> {
-    if (!await exists(source)) {
-      console.log(`  ℹ Skipped ${description}: source file not found`)
-      return
-    }
-
     config.fileHashes ??= {}
     const hashes = config.fileHashes
 
-    const sourceContent = await Deno.readTextFile(source)
+    // Get source content - either from file or passed directly
+    let sourceContent: string
+    if (generatedContent) {
+      sourceContent = generatedContent
+    } else {
+      if (!await exists(source)) {
+        console.log(`  ℹ Skipped ${description}: source file not found`)
+        return
+      }
+      sourceContent = await Deno.readTextFile(source)
+    }
+
     const sourceHash = await this.computeHash(sourceContent)
 
     const targetExists = await exists(target)
