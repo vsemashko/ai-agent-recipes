@@ -7,6 +7,7 @@ export interface InstallConfig {
   installedTools: string[]
   lastUpdateCheck: string
   installPath: string
+  customPaths?: Record<string, string>
 }
 
 export class Installer {
@@ -58,8 +59,7 @@ export class Installer {
 
     // Check for Claude Code
     const claudeCodePaths = [
-      join(this.homeDir, '.config', 'claude-code'),
-      join(this.homeDir, '.claude-code'),
+      join(this.homeDir, '.claude'),
     ]
     for (const path of claudeCodePaths) {
       if (await exists(path)) {
@@ -144,12 +144,79 @@ export class Installer {
     }
   }
 
+  private getRepositoryCandidates(): string[] {
+    const candidates = new Set<string>()
+    if (this.installDir) {
+      candidates.add(join(this.installDir, 'repo'))
+      candidates.add(this.installDir)
+    }
+    const runtimeRoot = join(dirname(dirname(import.meta.dirname!)))
+    candidates.add(runtimeRoot)
+    return Array.from(candidates).filter((path) => path.length > 0)
+  }
+
+  private async resolveRepositoryRoot(): Promise<string | null> {
+    for (const candidate of this.getRepositoryCandidates()) {
+      try {
+        if (await exists(join(candidate, 'instructions'))) {
+          return candidate
+        }
+        if (await exists(join(candidate, 'skills'))) {
+          return candidate
+        }
+      } catch {
+        // Ignore and continue checking other candidates
+      }
+    }
+    return null
+  }
+
+  private async resolveGitRepository(): Promise<string | null> {
+    for (const candidate of this.getRepositoryCandidates()) {
+      try {
+        if (await exists(join(candidate, '.git'))) {
+          return candidate
+        }
+      } catch {
+        // Ignore and continue checking other candidates
+      }
+    }
+    return null
+  }
+
   async syncInstructions(tools: string[], config: InstallConfig): Promise<InstallConfig> {
     console.log('\n📝 Syncing instructions...\n')
 
-    const repoRoot = join(dirname(dirname(import.meta.dirname!)))
+    const repoRoot = await this.resolveRepositoryRoot()
+    if (!repoRoot) {
+      console.log('  ⚠ Could not locate agent-recipes repository content. Skipping sync.')
+      return config
+    }
 
+    const installedTools = Array.from(config.installedTools ?? [])
     for (const tool of tools) {
+      if (!installedTools.includes(tool)) {
+        installedTools.push(tool)
+      }
+    }
+
+    const detectedTools = await this.detectAITools()
+    const newlyDetected: string[] = []
+    for (const tool of detectedTools) {
+      if (!installedTools.includes(tool)) {
+        installedTools.push(tool)
+        newlyDetected.push(tool)
+      }
+    }
+
+    if (newlyDetected.length > 0) {
+      const label = newlyDetected.length === 1 ? 'tool' : 'tools'
+      console.log(
+        `  ✓ Detected new ${label}: ${newlyDetected.join(', ')} (auto-added to sync list)`,
+      )
+    }
+
+    for (const tool of installedTools) {
       try {
         if (tool === 'claude-code') {
           await this.syncClaudeCode(repoRoot)
@@ -161,7 +228,10 @@ export class Installer {
       }
     }
 
-    return config
+    return {
+      ...config,
+      installedTools,
+    }
   }
 
   private async syncClaudeCode(repoRoot: string): Promise<void> {
@@ -171,7 +241,7 @@ export class Installer {
       return
     }
 
-    const targetPath = join(this.homeDir, '.config', 'claude-code')
+    const targetPath = join(this.homeDir, '.claude')
     await Deno.mkdir(targetPath, { recursive: true })
 
     // Sync CLAUDE.md with managed section
@@ -374,17 +444,16 @@ export class Installer {
     { hasUpdate: boolean; latestVersion: string; currentVersion: string } | null
   > {
     try {
-      // Check if install directory exists and is a git repository
-      const gitDir = join(this.installDir, '.git')
-      if (!await exists(gitDir)) {
-        console.log('  ℹ Not a git repository, skipping update check')
+      const repoPath = await this.resolveGitRepository()
+      if (!repoPath) {
+        console.log('  ℹ Repository not managed by git, skipping update check')
         return null
       }
 
       // Fetch latest from origin (quietly)
       const fetchCmd = new Deno.Command('git', {
         args: ['fetch', 'origin', '--quiet'],
-        cwd: this.installDir,
+        cwd: repoPath,
         stdout: 'null',
         stderr: 'null',
       })
@@ -396,12 +465,12 @@ export class Installer {
       }
 
       // Determine remote branch (try main first, fall back to master)
-      const remoteBranch = await this.getDefaultRemoteBranch()
+      const remoteBranch = await this.getDefaultRemoteBranch(repoPath)
 
       // Get current commit hash
       const currentHashCmd = new Deno.Command('git', {
         args: ['rev-parse', 'HEAD'],
-        cwd: this.installDir,
+        cwd: repoPath,
         stdout: 'piped',
       })
       const currentHashResult = await currentHashCmd.output()
@@ -413,7 +482,7 @@ export class Installer {
       // Get remote commit hash
       const remoteHashCmd = new Deno.Command('git', {
         args: ['rev-parse', `origin/${remoteBranch}`],
-        cwd: this.installDir,
+        cwd: repoPath,
         stdout: 'piped',
         stderr: 'null',
       })
@@ -427,7 +496,7 @@ export class Installer {
       // Check if remote is ahead
       const revListCmd = new Deno.Command('git', {
         args: ['rev-list', '--count', `HEAD..origin/${remoteBranch}`],
-        cwd: this.installDir,
+        cwd: repoPath,
         stdout: 'piped',
         stderr: 'null',
       })
@@ -454,13 +523,19 @@ export class Installer {
 
   async pullLatestChanges(): Promise<boolean> {
     try {
+      const repoPath = await this.resolveGitRepository()
+      if (!repoPath) {
+        console.log('  ℹ Repository not managed by git, cannot pull updates automatically')
+        return false
+      }
+
       // Get the default remote branch
-      const remoteBranch = await this.getDefaultRemoteBranch()
+      const remoteBranch = await this.getDefaultRemoteBranch(repoPath)
 
       // Reset to remote branch (hard reset to avoid merge conflicts)
       const resetCmd = new Deno.Command('git', {
         args: ['reset', '--hard', `origin/${remoteBranch}`],
-        cwd: this.installDir,
+        cwd: repoPath,
         stdout: 'piped',
         stderr: 'piped',
       })
@@ -476,7 +551,7 @@ export class Installer {
       // Clean any untracked files
       const cleanCmd = new Deno.Command('git', {
         args: ['clean', '-fd'],
-        cwd: this.installDir,
+        cwd: repoPath,
         stdout: 'null',
         stderr: 'null',
       })
@@ -491,12 +566,12 @@ export class Installer {
     }
   }
 
-  private async getDefaultRemoteBranch(): Promise<string> {
+  private async getDefaultRemoteBranch(repoPath: string): Promise<string> {
     try {
       // Try to get default remote branch
       const cmd = new Deno.Command('git', {
         args: ['symbolic-ref', 'refs/remotes/origin/HEAD'],
-        cwd: this.installDir,
+        cwd: repoPath,
         stdout: 'piped',
         stderr: 'null',
       })
@@ -516,7 +591,7 @@ export class Installer {
     for (const branch of branches) {
       const cmd = new Deno.Command('git', {
         args: ['rev-parse', '--verify', `origin/${branch}`],
-        cwd: this.installDir,
+        cwd: repoPath,
         stdout: 'null',
         stderr: 'null',
       })

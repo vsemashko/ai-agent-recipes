@@ -16,7 +16,7 @@ Agent Recipes makes it easy to:
 
 ```bash
 # Option 1: Quick install (recommended)
-curl https://agent-recipes.stashaway.internal | sh
+curl -fsSL https://gitlab.stashaway.com/vladimir.semashko/stashaway-agent-recipes/-/raw/main/install.sh | sh
 
 # Option 2: From source
 git clone git@gitlab.stashaway.com:vladimir.semashko/stashaway-agent-recipes.git
@@ -64,7 +64,7 @@ To use a skill, simply ask Claude naturally:
 ## 🛠️ Supported AI Tools
 
 ### Claude Code
-- **Location**: `~/.config/claude-code/`
+- **Location**: `~/.claude/`
 - **Format**: Global instructions (CLAUDE.md) + skills directory
 - **Setup**: Automatic via `agent-recipes sync`
 
@@ -94,8 +94,8 @@ agent-recipes sync --force
 ## 📁 What Gets Installed?
 
 ### For Claude Code Users
-- Global instructions → `~/.config/claude-code/CLAUDE.md`
-- Skills directory → `~/.config/claude-code/skills/` (symlinked)
+- Global instructions → `~/.claude/CLAUDE.md`
+- Skills directory → `~/.claude/skills/` (managed copies with `sa_` prefix)
 
 ### For Codex CLI Users
 - Combined file → `~/.codex/AGENTS.md` (auto-generated from instructions + skills)
@@ -139,7 +139,7 @@ Skills with the `sa_` prefix are managed by agent-recipes. To add custom skills:
 
 **Option 1: Add alongside (recommended)**
 ```bash
-~/.config/claude-code/skills/
+~/.claude/skills/
 ├── sa_rightsize/        # Managed - updated on sync
 ├── sa_commit-message/   # Managed - updated on sync
 ├── my-custom-skill/     # Yours - never touched!
@@ -149,7 +149,7 @@ Skills with the `sa_` prefix are managed by agent-recipes. To add custom skills:
 **Option 2: Customize a managed skill**
 ```bash
 # Copy and remove sa_ prefix
-cp -r ~/.config/claude-code/skills/sa_rightsize ~/.config/claude-code/skills/rightsize
+cp -r ~/.claude/skills/sa_rightsize ~/.claude/skills/rightsize
 
 # Now edit rightsize/ - it's yours!
 # Note: You won't get automatic updates for this skill
@@ -181,7 +181,7 @@ export PATH="$PATH:$HOME/.stashaway-agent-recipes/bin"
 ### Skills not showing up in Claude Code
 ```bash
 agent-recipes sync
-ls ~/.config/claude-code/skills/
+ls ~/.claude/skills/
 ```
 
 ### AGENTS.md not updating for Codex
