@@ -26,9 +26,9 @@ export function parseSkillFrontmatter(content: string): ParsedSkill | null {
   return {
     frontmatter: {
       name: nameMatch[1].trim(),
-      description: descMatch[1].trim()
+      description: descMatch[1].trim(),
     },
-    body: body.trim()
+    body: body.trim(),
   }
 }
 
@@ -69,13 +69,13 @@ export function skillToCodexAgent(parsed: ParsedSkill): object {
     name: frontmatter.name,
     description: frontmatter.description,
     instructions: body,
-    trigger: `/${frontmatter.name}`
+    trigger: `/${frontmatter.name}`,
   }
 }
 
 export async function convertSkillFile(
   skillPath: string,
-  format: 'agent-md' | 'cursor-mdc' | 'codex-json'
+  format: 'agent-md' | 'cursor-mdc' | 'codex-json',
 ): Promise<string | object> {
   if (!await exists(skillPath)) {
     throw new Error(`Skill file not found: ${skillPath}`)
@@ -102,7 +102,7 @@ export async function convertSkillFile(
 
 export async function batchConvertSkills(
   skillsDir: string,
-  format: 'agent-md' | 'cursor-mdc' | 'codex-json'
+  format: 'agent-md' | 'cursor-mdc' | 'codex-json',
 ): Promise<Array<{ skill: string; output: string | object }>> {
   const results: Array<{ skill: string; output: string | object }> = []
 
@@ -114,7 +114,8 @@ export async function batchConvertSkills(
         const output = await convertSkillFile(skillFile, format)
         results.push({ skill: entry.name, output })
       } catch (error) {
-        console.error(`⚠ Failed to convert ${entry.name}:`, error.message)
+        const message = error instanceof Error ? error.message : String(error)
+        console.error(`⚠ Failed to convert ${entry.name}:`, message)
       }
     }
   }
