@@ -1,12 +1,12 @@
 # StashAway Global Instructions for Claude Code
 
-These are global instructions for Claude Code users at StashAway. They apply to all projects unless overridden by project-specific configurations.
+**Important:** This file uses managed sections. Content above the managed section marker is yours and will never be modified. The section below is automatically updated when you run `agent-recipes sync`.
 
 ## Coding Standards
 
 ### Branch Naming & Commit Messages
 
-For branch naming conventions and commit message formatting, use the **commit-message** skill. This skill will guide you through proper formatting following StashAway standards.
+For branch naming conventions and commit message formatting, use the **sa_commit-message** skill. This skill will guide you through proper formatting following StashAway standards.
 
 ### Code Quality
 
@@ -16,7 +16,7 @@ For branch naming conventions and commit message formatting, use the **commit-me
 - Write tests for new features
 - Update documentation when needed
 
-### Security
+## Security
 
 - Never commit secrets or credentials
 - Use environment variables for sensitive data
@@ -26,9 +26,14 @@ For branch naming conventions and commit message formatting, use the **commit-me
 
 ## Using Skills
 
-Claude Code has access to specialized skills for StashAway workflows in the `skills/` directory. These provide step-by-step guidance for common tasks.
+Skills with the `sa_` prefix are managed by agent-recipes and provide specialized guidance for StashAway workflows:
+
+- **sa_rightsize** - Check and optimize Kubernetes resource allocations
+- **sa_commit-message** - Generate properly formatted commit messages
 
 To use a skill, simply ask about the task naturally (e.g., "Can you check if this service is rightsized?").
+
+**Custom Skills:** You can add your own skills to the `skills/` directory without the `sa_` prefix. They will be preserved when syncing.
 
 ## Getting Help
 
@@ -38,4 +43,4 @@ To use a skill, simply ask about the task naturally (e.g., "Can you check if thi
 
 ---
 
-*These instructions are managed by the stashaway-agent-recipes repository. To update, modify the source and run `agent-recipes sync`.*
+*This section is managed by agent-recipes. To customize these instructions, edit content above the managed section marker.*

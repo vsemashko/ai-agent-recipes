@@ -1,16 +1,11 @@
 import { exists } from '@std/fs'
 import { join, dirname } from '@std/path'
-import { Confirm } from '@cliffy/prompt'
 
 export interface InstallConfig {
   version: string
   installedTools: string[]
   lastUpdateCheck: string
   installPath: string
-  customPaths?: {
-    [key: string]: string
-  }
-  fileHashes?: Record<string, string>
 }
 
 export class Installer {
@@ -142,14 +137,13 @@ export class Installer {
     console.log('\n📝 Syncing instructions...\n')
 
     const repoRoot = join(dirname(dirname(import.meta.dirname!)))
-    config.fileHashes ??= {}
 
     for (const tool of tools) {
       try {
         if (tool === 'claude-code') {
-          await this.syncClaudeCode(repoRoot, config)
+          await this.syncClaudeCode(repoRoot)
         } else if (tool === 'codex') {
-          await this.syncCodex(repoRoot, config)
+          await this.syncCodex(repoRoot)
         }
       } catch (error) {
         console.error(`⚠ Failed to sync ${tool}:`, error)
@@ -159,7 +153,7 @@ export class Installer {
     return config
   }
 
-  private async syncClaudeCode(repoRoot: string, config: InstallConfig): Promise<void> {
+  private async syncClaudeCode(repoRoot: string): Promise<void> {
     const sourcePath = join(repoRoot, 'instructions', 'claude-code')
     if (!await exists(sourcePath)) {
       console.log('ℹ Claude Code instructions not found in repository')
@@ -169,35 +163,25 @@ export class Installer {
     const targetPath = join(this.homeDir, '.config', 'claude-code')
     await Deno.mkdir(targetPath, { recursive: true })
 
-    // Sync CLAUDE.md (main instructions file)
-    await this.syncFileWithHash(
-      join(sourcePath, 'CLAUDE.md'),
-      join(targetPath, 'CLAUDE.md'),
-      config,
-      'claude-code/CLAUDE.md',
-      'Claude Code CLAUDE.md',
-    )
+    // Sync CLAUDE.md with managed section
+    const claudeMdSource = join(sourcePath, 'CLAUDE.md')
+    const claudeMdTarget = join(targetPath, 'CLAUDE.md')
 
-    // Sync skills directory from repo root
+    if (await exists(claudeMdSource)) {
+      const ourContent = await Deno.readTextFile(claudeMdSource)
+      await this.syncManagedFile(claudeMdTarget, ourContent, 'Claude Code CLAUDE.md')
+    }
+
+    // Sync skills with sa_ prefix
     const skillsSource = join(repoRoot, 'skills')
     const skillsTarget = join(targetPath, 'skills')
 
     if (await exists(skillsSource)) {
-      try {
-        // Remove existing symlink/directory if it exists
-        if (await exists(skillsTarget)) {
-          await Deno.remove(skillsTarget, { recursive: true })
-        }
-        await Deno.symlink(skillsSource, skillsTarget, { type: 'dir' })
-        console.log('  ✓ Created symlink for skills')
-      } catch {
-        await this.copyDirectory(skillsSource, skillsTarget)
-        console.log('  ✓ Copied skills directory')
-      }
+      await this.syncSkills(skillsSource, skillsTarget)
     }
   }
 
-  private async syncCodex(repoRoot: string, config: InstallConfig): Promise<void> {
+  private async syncCodex(repoRoot: string): Promise<void> {
     const targetPath = join(this.homeDir, '.codex')
     await Deno.mkdir(targetPath, { recursive: true })
 
@@ -215,15 +199,10 @@ export class Installer {
     const { batchConvertSkills } = await import(converterPath)
 
     try {
-      console.log('  ⚙️  Generating AGENTS.md from global instructions + skills...')
-
-      // Read CLAUDE.md if it exists to include as header
-      let header = '# AI Agent Skills for StashAway\n\nThis file is auto-generated from the stashaway-agent-recipes repository.\n\n'
-
+      // Read CLAUDE.md if it exists
+      let claudeMdContent = ''
       if (await exists(claudeMdPath)) {
-        const claudeMdContent = await Deno.readTextFile(claudeMdPath)
-        // Add CLAUDE.md content as the introduction
-        header += '---\n\n' + claudeMdContent + '\n\n---\n\n# Available Skills\n\n'
+        claudeMdContent = await Deno.readTextFile(claudeMdPath)
       }
 
       // Convert all skills
@@ -234,87 +213,129 @@ export class Installer {
         return
       }
 
-      // Combine header + skills
-      const combined = header + results.map((r) => r.output).join('\n\n---\n\n')
+      // Build managed content: CLAUDE.md + skills
+      const managedContent = [
+        '# StashAway Agent Instructions\n',
+        'This section is managed by agent-recipes. Add your custom content above this line.\n',
+        '---\n',
+        claudeMdContent,
+        '\n---\n',
+        '# Available Skills\n',
+        results.map((r) => r.output).join('\n\n---\n\n')
+      ].join('\n')
 
-      // Write to target with hash tracking
+      // Sync with managed section
       const targetFile = join(targetPath, 'AGENTS.md')
-      await this.syncFileWithHash(
-        'generated', // Source is generated, not a file
-        targetFile,
-        config,
-        'codex/AGENTS.md',
-        'Codex AGENTS.md',
-        combined  // Pass content directly
-      )
+      await this.syncManagedFile(targetFile, managedContent, 'Codex AGENTS.md')
 
-      console.log(`  ✓ Generated AGENTS.md with global instructions + ${results.length} skill(s)`)
+      console.log(`  ✓ Synced AGENTS.md with global instructions + ${results.length} skill(s)`)
     } catch (error) {
       console.error('  ⚠ Failed to generate AGENTS.md:', error.message)
     }
   }
 
-  private async syncFileWithHash(
-    source: string,
-    target: string,
-    config: InstallConfig,
-    hashKey: string,
-    description: string,
-    generatedContent?: string  // Optional: pass content directly instead of reading from file
+  /**
+   * Sync a file with managed section markers
+   * User content above marker is preserved, managed section is always replaced
+   */
+  private async syncManagedFile(
+    targetPath: string,
+    ourManagedContent: string,
+    description: string
   ): Promise<void> {
-    config.fileHashes ??= {}
-    const hashes = config.fileHashes
+    const MARKER_START = '<!-- AGENT-RECIPES-MANAGED-START -->'
+    const MARKER_END = '<!-- AGENT-RECIPES-MANAGED-END -->'
 
-    // Get source content - either from file or passed directly
-    let sourceContent: string
-    if (generatedContent) {
-      sourceContent = generatedContent
+    if (!await exists(targetPath)) {
+      // First time - create file with managed section at end
+      const initialContent = [
+        '# My Custom Instructions\n',
+        'Add your custom instructions here.\n',
+        'Everything above the managed section marker will be preserved.\n\n',
+        '---\n\n',
+        MARKER_START,
+        '<!-- This section is managed by agent-recipes. Edit content above this line. -->\n',
+        ourManagedContent,
+        '\n' + MARKER_END
+      ].join('')
+
+      await Deno.writeTextFile(targetPath, initialContent)
+      console.log(`  ✓ Created ${description} with managed section`)
+      return
+    }
+
+    // File exists - split and replace managed section
+    const content = await Deno.readTextFile(targetPath)
+    const markerIndex = content.indexOf(MARKER_START)
+
+    let userContent: string
+    let hadManagedSection: boolean
+
+    if (markerIndex === -1) {
+      // No managed section yet - keep all content as user content
+      userContent = content.trim()
+      hadManagedSection = false
     } else {
-      if (!await exists(source)) {
-        console.log(`  ℹ Skipped ${description}: source file not found`)
-        return
-      }
-      sourceContent = await Deno.readTextFile(source)
+      // Extract user content (everything before marker)
+      userContent = content.substring(0, markerIndex).trim()
+      hadManagedSection = true
     }
 
-    const sourceHash = await this.computeHash(sourceContent)
+    // Reconstruct: user content + our managed section
+    const newContent = [
+      userContent,
+      '\n\n---\n\n',
+      MARKER_START,
+      '<!-- This section is managed by agent-recipes. Edit content above this line. -->\n',
+      ourManagedContent,
+      '\n' + MARKER_END
+    ].join('')
 
-    const targetExists = await exists(target)
-    if (targetExists) {
-      const targetContent = await Deno.readTextFile(target)
-      const targetHash = await this.computeHash(targetContent)
-      const previousHash = hashes[hashKey]
+    await Deno.writeTextFile(targetPath, newContent)
+    console.log(hadManagedSection
+      ? `  ✓ Updated managed section in ${description}`
+      : `  ✓ Added managed section to ${description}`)
+  }
 
-      if (targetHash === sourceHash) {
-        hashes[hashKey] = sourceHash
-        console.log(`  ✓ ${description} is already up to date`)
-        return
-      }
+  /**
+   * Sync skills with sa_ prefix (always replace our managed skills)
+   */
+  private async syncSkills(sourceDir: string, targetDir: string): Promise<void> {
+    await Deno.mkdir(targetDir, { recursive: true })
 
-      if (previousHash && targetHash !== previousHash) {
-        const overwrite = await Confirm.prompt({
-          message: `${description} has local changes. Overwrite with repository version?`,
-          default: false,
-        })
-        if (!overwrite) {
-          console.log(`  ↩ Skipped ${description}`)
-          return
-        }
-      } else if (!previousHash && targetHash !== sourceHash) {
-        const overwrite = await Confirm.prompt({
-          message: `${description} already exists. Replace with repository version?`,
-          default: false,
-        })
-        if (!overwrite) {
-          console.log(`  ↩ Skipped ${description}`)
-          return
-        }
+    // Get list of skills from repo
+    const repoSkills: string[] = []
+    for await (const entry of Deno.readDir(sourceDir)) {
+      if (entry.isDirectory) {
+        repoSkills.push(entry.name)
       }
     }
 
-    await Deno.writeTextFile(target, sourceContent)
-    hashes[hashKey] = sourceHash
-    console.log(`  ✓ Synced ${description}`)
+    // Sync each repo skill with sa_ prefix
+    for (const skillName of repoSkills) {
+      const sourcePath = join(sourceDir, skillName)
+      const targetPath = join(targetDir, `sa_${skillName}`)
+
+      // Always replace - no questions asked
+      if (await exists(targetPath)) {
+        await Deno.remove(targetPath, { recursive: true })
+      }
+
+      await this.copyDirectory(sourcePath, targetPath)
+      console.log(`  ✓ Synced skill: sa_${skillName}`)
+    }
+
+    // Count user's custom skills (no sa_ prefix)
+    let customCount = 0
+    for await (const entry of Deno.readDir(targetDir)) {
+      if (entry.isDirectory && !entry.name.startsWith('sa_')) {
+        customCount++
+      }
+    }
+
+    if (customCount > 0) {
+      console.log(`  ℹ  Preserved ${customCount} custom skill(s)`)
+    }
   }
 
   private async copyDirectory(source: string, target: string): Promise<void> {
@@ -330,12 +351,6 @@ export class Installer {
         await Deno.copyFile(sourcePath, targetPath)
       }
     }
-  }
-
-  private async computeHash(content: string | Uint8Array): Promise<string> {
-    const data = typeof content === 'string' ? new TextEncoder().encode(content) : content
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-    return Array.from(new Uint8Array(hashBuffer)).map((byte) => byte.toString(16).padStart(2, '0')).join('')
   }
 
   async checkForUpdates(): Promise<{ hasUpdate: boolean; latestVersion: string; currentVersion: string } | null> {

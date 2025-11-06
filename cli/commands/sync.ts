@@ -31,7 +31,6 @@ export const syncCommand = new Command()
           installedTools: tools,
           lastUpdateCheck: new Date().toISOString(),
           installPath: installer.getInstallPath(),
-          fileHashes: {},
         }
         await installer.saveConfig(config)
 

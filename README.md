@@ -109,6 +109,56 @@ agent-recipes sync --force
 - Binary at `~/.stashaway-agent-recipes/bin/agent-recipes`
 - Added to your PATH automatically
 
+## ✏️ Customizing
+
+### Global Instructions (CLAUDE.md / AGENTS.md)
+
+The synced files use **managed sections**. You can safely add your own content above the managed section marker:
+
+```markdown
+# My Custom Instructions
+
+Add your team-specific guidelines here.
+Everything above the marker is safe!
+
+## My Company Rules
+- Rule 1
+- Rule 2
+
+---
+
+<!-- AGENT-RECIPES-MANAGED-START -->
+[This section is automatically replaced when you sync]
+<!-- AGENT-RECIPES-MANAGED-END -->
+```
+
+**On sync:**
+- ✅ Your content above the marker is preserved
+- ✅ Managed section is updated with latest from repo
+- ✅ No conflicts, no prompts needed
+
+### Custom Skills
+
+Skills with the `sa_` prefix are managed by agent-recipes. To add custom skills:
+
+**Option 1: Add alongside (recommended)**
+```bash
+~/.config/claude-code/skills/
+├── sa_rightsize/        # Managed - updated on sync
+├── sa_commit-message/   # Managed - updated on sync
+├── my-custom-skill/     # Yours - never touched!
+└── db-migration/        # Yours - never touched!
+```
+
+**Option 2: Customize a managed skill**
+```bash
+# Copy and remove sa_ prefix
+cp -r ~/.config/claude-code/skills/sa_rightsize ~/.config/claude-code/skills/rightsize
+
+# Now edit rightsize/ - it's yours!
+# Note: You won't get automatic updates for this skill
+```
+
 ## 🤝 Contributing
 
 We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for:
