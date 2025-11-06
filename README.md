@@ -17,7 +17,10 @@ Agent Recipes makes it easy to:
 
 ```bash
 # Option 1: Quick install (recommended)
-curl -fsSL https://gitlab.stashaway.com/vladimir.semashko/stashaway-agent-recipes/-/raw/main/install.sh | sh
+command -v glab >/dev/null || brew install glab
+glab api --hostname gitlab.stashaway.com \
+  "projects/vladimir.semashko%2Fstashaway-agent-recipes/repository/files/install.sh/raw?ref=main" \
+  | sh
 
 # Option 2: From source
 git clone git@gitlab.stashaway.com:vladimir.semashko/stashaway-agent-recipes.git
@@ -118,25 +121,17 @@ agent-recipes sync --force
 
 ### Global Instructions (CLAUDE.md / AGENTS.md)
 
-The synced files use **managed sections**. You can safely add your own content above the managed section marker:
+The synced files use **managed sections**. You can safely add your own content above the custom instructions tag:
 
 ```markdown
 # My Custom Instructions
 
-Add your team-specific guidelines here. Everything above the marker is safe!
+- Add team policies here
+- Everything above the tag stays untouched
 
-## My Company Rules
-
-- Rule 1
-- Rule 2
-
----
-
-<!-- AGENT-RECIPES-MANAGED-START -->
-
-[This section is automatically replaced when you sync]
-
-<!-- AGENT-RECIPES-MANAGED-END -->
+<stashaway-recipes-managed-section>
+[Managed instructions live here and are replaced on sync]
+</stashaway-recipes-managed-section>
 ```
 
 **On sync:**
@@ -181,7 +176,7 @@ We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for:
 Quick overview:
 
 1. Create a feature branch: `<type>/<ticket>-<description>`
-2. Add your skill in `skills/my-skill/SKILL.md`
+2. Add your skill in `skills/sa_my-skill/SKILL.md` (keep the `name` field without the prefix)
 3. Test with `agent-recipes sync`
 4. Submit a merge request
 

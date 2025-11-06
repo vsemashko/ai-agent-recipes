@@ -21,7 +21,7 @@ Invoke when: "Help me create a new skill" or "Add a skill for [purpose]"
 ### Workflow
 
 1. Ask user for skill name and description
-2. Create directory: `skills/{skill-name}/`
+2. Create directory: `skills/sa_{skill-name}/` (managed skills use `sa_`, keep the actual skill name without the prefix)
 3. Generate `SKILL.md` with frontmatter:
    ```markdown
    ---
@@ -164,6 +164,7 @@ Invoke when: "Update documentation" or "Generate docs for [component]"
 - Creates skill documentation
 - Updates PLAN_claude.md
 - Syncs docs across formats
+- Maintains CHANGELOG.md entries for instruction and skill updates
 - Checks for doc inconsistencies
 
 ### Documentation Types
@@ -179,8 +180,9 @@ Invoke when: "Update documentation" or "Generate docs for [component]"
 1. Identify what needs documentation
 2. Generate or update relevant files
 3. Ensure consistency across docs
-4. Validate links and references
-5. Check for completeness
+4. Update `CHANGELOG.md` with summaries when skills or global instructions change
+5. Validate links and references
+6. Check for completeness
 
 ---
 
@@ -265,7 +267,7 @@ Invoke when: "Bump version" or "Create release"
 
 - Updates version numbers
 - Creates git tags
-- Generates changelog
+- Updates CHANGELOG.md with release notes
 - Updates documentation
 - Creates release notes
 - Validates release readiness
@@ -273,10 +275,10 @@ Invoke when: "Bump version" or "Create release"
 ### Version Update Workflow
 
 1. Determine version bump (major, minor, patch)
-2. Update `deno.json`
+2. Update `deno.json` (manual edit; no automated version helper available yet)
 3. Update `main.ts` VERSION constant
-4. Update README.md if needed
-5. Generate changelog from commits
+4. Update `CHANGELOG.md` with release notes (call out new/updated skills and instruction changes)
+5. Update README.md if needed
 6. Create git tag
 7. Push to remote
 
