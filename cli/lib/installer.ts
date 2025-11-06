@@ -167,10 +167,12 @@ export class Installer {
     const claudeMdSource = join(sourcePath, 'CLAUDE.md')
     const claudeMdTarget = join(targetPath, 'CLAUDE.md')
 
+    let ourContent = ''
     if (await exists(claudeMdSource)) {
-      const ourContent = await Deno.readTextFile(claudeMdSource)
-      await this.syncManagedFile(claudeMdTarget, ourContent, 'Claude Code CLAUDE.md')
+      ourContent = await Deno.readTextFile(claudeMdSource)
     }
+    // Always sync (creates file if missing, updates if exists)
+    await this.syncManagedFile(claudeMdTarget, ourContent, 'Claude Code CLAUDE.md')
 
     // Sync skills with sa_ prefix
     const skillsSource = join(repoRoot, 'skills')
