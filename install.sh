@@ -108,11 +108,15 @@ else
   fi
 fi
 
+# Prepare temp directory for compile (avoid permission issues)
+tmp_dir="$agent_recipes_home/tmp"
+mkdir -p "$tmp_dir"
+
 # Build the CLI
 echo ""
 echo "🔨 Building CLI..."
 cd "$repo_dir"
-deno compile --allow-all --output="$bin_dir/agent-recipes" main.ts
+TMPDIR="$tmp_dir" deno compile --allow-all --output="$bin_dir/agent-recipes" main.ts
 
 if [ ! -f "$bin_dir/agent-recipes" ]; then
   echo "❌ Failed to build CLI"
