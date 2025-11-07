@@ -2,6 +2,8 @@ import { exists } from '@std/fs'
 import { dirname, join } from '@std/path'
 import { Confirm } from '@cliffy/prompt'
 import { batchConvertSkills } from './converter.ts'
+import { TemplateRenderer } from './template.ts'
+import { PathAdjuster } from './path-adjuster.ts'
 
 export interface InstallConfig {
   version: string
@@ -32,48 +34,6 @@ export class Installer {
     this.binPath = join(this.installDir, 'bin')
   }
 
-  private buildSkillsSection(skillsList: string): string {
-    return `## Available Skills
-
-You have access to the following specialized skills. **Before starting any task, review this list to identify relevant skills.**
-
-### Skill Directory
-
-<!-- AUTO-GENERATED SKILLS LIST START -->
-${skillsList}
-<!-- AUTO-GENERATED SKILLS LIST END -->
-
-### Skill Usage Protocol
-
-**CRITICAL: Follow this workflow for EVERY task:**
-
-1. **Pre-Task Check**: Before starting any task, scan the available skills list above
-2. **Match Detection**: Identify if any skill is relevant to the current task based on its description
-3. **Skill Activation**: If a match is found:
-   - Read the full SKILL.md file at the specified path
-   - Follow ALL instructions and best practices defined in that skill
-   - Use any helper scripts or tools mentioned in the skill
-4. **Multiple Skills**: If multiple skills apply, read and integrate guidance from all relevant skills
-5. **No Match**: If no skill matches, proceed with standard approach
-
-### Examples
-
-**Task: "Create a PDF report with charts"**
-→ Match: \`pdf\` skill
-→ Action: Read the pdf SKILL.md and follow its instructions
-
-**Task: "Check if deployment is rightsized"**
-→ Match: \`rightsize\` skill
-→ Action: Read the rightsize SKILL.md and follow its instructions
-
-### Important Notes
-
-- Skills contain expert knowledge and best practices - always defer to skill instructions when available
-- Skills may include helper scripts, templates, or specific tool recommendations - use them
-- Read the SKILL.md completely before starting work - it may contain critical requirements
-- Some skills have dependencies or prerequisites listed in their documentation
-`
-  }
 
   async isInstalled(): Promise<boolean> {
     return await exists(this.configPath)
@@ -299,12 +259,13 @@ ${skillsList}
     // Always sync (creates file if missing, updates if exists)
     await this.syncManagedFile(claudeMdTarget, ourContent, 'Claude Code CLAUDE.md')
 
-    // Sync skills (managed copies keep sa_ prefix)
+    // Sync skills with path adjustment (managed copies keep sa_ prefix)
     const skillsSource = join(repoRoot, 'skills')
     const skillsTarget = join(targetPath, 'skills')
 
     if (await exists(skillsSource)) {
-      await this.syncSkills(skillsSource, skillsTarget)
+      const pathAdjuster = new PathAdjuster()
+      await this.syncSkills(skillsSource, skillsTarget, 'claude-code', pathAdjuster)
     }
   }
 
@@ -312,13 +273,14 @@ ${skillsList}
     const targetPath = join(this.homeDir, '.codex')
     await Deno.mkdir(targetPath, { recursive: true })
 
-    // Auto-generate AGENTS.md from CLAUDE.md + skills
+    // Auto-generate AGENTS.md from CLAUDE.md + skills using template
+    const templatePath = join(repoRoot, 'instructions', 'templates', 'agents.mustache')
     const claudeMdPath = join(repoRoot, 'instructions', 'claude-code', 'CLAUDE.md')
     const skillsDir = join(repoRoot, 'skills')
 
     try {
       // Read CLAUDE.md (optional)
-      const claudeMdContent = await exists(claudeMdPath)
+      const globalInstructions = await exists(claudeMdPath)
         ? await Deno.readTextFile(claudeMdPath)
         : ''
 
@@ -333,32 +295,24 @@ ${skillsList}
       // deno-lint-ignore no-explicit-any
       const skillsList = results.map((r: { output: any }) => r.output).join('\n')
 
-      // Build skills section with auto-generated list
-      const skillsSection = this.buildSkillsSection(skillsList)
-
-      // Build managed content
-      const managedContent = `# StashAway Agent Instructions
-
-This section is managed by agent-recipes. Add your custom content above this line.
-
----
-
-# Global Instructions
-
-${claudeMdContent}
-
----
-
-${skillsSection}
-`
+      // Render template
+      const renderer = new TemplateRenderer()
+      const managedContent = await renderer.render(templatePath, {
+        companyName: 'StashAway',
+        toolName: 'Codex CLI',
+        globalInstructions,
+        skillsList,
+        skillCount: results.length,
+      })
 
       // Sync with managed section
       const targetFile = join(targetPath, 'AGENTS.md')
       await this.syncManagedFile(targetFile, managedContent, 'Codex AGENTS.md')
 
-      // Copy skills to .codex/skills directory
+      // Copy skills to .codex/skills directory with path adjustment
       const targetSkillsDir = join(targetPath, 'skills')
-      await this.syncSkills(skillsDir, targetSkillsDir)
+      const pathAdjuster = new PathAdjuster()
+      await this.syncSkills(skillsDir, targetSkillsDir, 'codex', pathAdjuster)
 
       console.log(`  ✓ Synced AGENTS.md with global instructions + ${results.length} skill(s)`)
     } catch (error) {
@@ -432,8 +386,14 @@ ${skillsSection}
 
   /**
    * Sync skills ensuring managed copies use sa_ prefix (always replace our managed skills)
+   * Also adjusts paths in skill content for target AI tool
    */
-  private async syncSkills(sourceDir: string, targetDir: string): Promise<void> {
+  private async syncSkills(
+    sourceDir: string,
+    targetDir: string,
+    tool: 'claude-code' | 'codex',
+    pathAdjuster: PathAdjuster,
+  ): Promise<void> {
     await Deno.mkdir(targetDir, { recursive: true })
 
     // Get list of skills from repo
@@ -456,7 +416,7 @@ ${skillsSection}
         await Deno.remove(targetPath, { recursive: true })
       }
 
-      await this.copyDirectory(sourcePath, targetPath)
+      await this.copyDirectoryWithPathAdjustment(sourcePath, targetPath, tool, pathAdjuster)
       console.log(`  ✓ Synced skill: ${targetName}`)
     }
 
@@ -484,6 +444,38 @@ ${skillsSection}
         await this.copyDirectory(sourcePath, targetPath)
       } else {
         await Deno.copyFile(sourcePath, targetPath)
+      }
+    }
+  }
+
+  /**
+   * Copy directory with path adjustment for AI tool-specific paths
+   * Adjusts paths in .md files to match the target tool's configuration
+   */
+  private async copyDirectoryWithPathAdjustment(
+    source: string,
+    target: string,
+    tool: 'claude-code' | 'codex',
+    pathAdjuster: PathAdjuster,
+  ): Promise<void> {
+    await Deno.mkdir(target, { recursive: true })
+
+    for await (const entry of Deno.readDir(source)) {
+      const sourcePath = join(source, entry.name)
+      const targetPath = join(target, entry.name)
+
+      if (entry.isDirectory) {
+        await this.copyDirectoryWithPathAdjustment(sourcePath, targetPath, tool, pathAdjuster)
+      } else {
+        // For .md files, adjust paths
+        if (entry.name.endsWith('.md')) {
+          const content = await Deno.readTextFile(sourcePath)
+          const adjusted = pathAdjuster.adjustPaths(content, tool)
+          await Deno.writeTextFile(targetPath, adjusted)
+        } else {
+          // Copy other files as-is
+          await Deno.copyFile(sourcePath, targetPath)
+        }
       }
     }
   }
