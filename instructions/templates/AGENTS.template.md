@@ -1,10 +1,5 @@
 # StashAway Agent Instructions
 
-This section is managed by agent-recipes. Add your custom content above this line.
-
----
-
-# Global Instructions
 
 {{globalInstructions}}
 
