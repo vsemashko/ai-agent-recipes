@@ -102,7 +102,6 @@ export const listCommand = new Command()
     console.log(
       '  • Claude Code: Skills are automatically available after running `agent-recipes sync`',
     )
-    console.log('  • Cursor: Project-specific instructions will return in a future release')
     console.log(
       '  • Codex: Skills are available via agents.json after running `agent-recipes sync`',
     )
