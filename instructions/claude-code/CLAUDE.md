@@ -1,4 +1,3 @@
-<stashaway-recipes-managed-section>
 # StashAway Global Instructions for Claude Code
 
 ## Coding Standards
@@ -23,5 +22,3 @@ following StashAway standards.
 - Sanitize all user inputs
 - Follow OWASP best practices
 - Review security implications of all changes
-
-</stashaway-recipes-managed-section>
