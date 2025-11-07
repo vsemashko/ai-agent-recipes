@@ -139,6 +139,19 @@
       "integrity": "sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ=="
     }
   },
+  "remote": {
+    "https://deno.land/x/eta@v3.4.0/src/compile-string.ts": "e095c711f8e76f407c5e82af296236759f15c03903f62ff03e6b3a5903ef90c3",
+    "https://deno.land/x/eta@v3.4.0/src/compile.ts": "ad011fc5f9b65d463342a29fbce980c8000bae51b08ef39fb4252e071e5a33d7",
+    "https://deno.land/x/eta@v3.4.0/src/config.ts": "66cacec37cbd8557db0026567070a8829fdf363ac35dc18cfa53663f6c10f518",
+    "https://deno.land/x/eta@v3.4.0/src/core.ts": "b0f74d80ef0d42f5409297661279a86aec40c42efd0bd4bf31f8ee042d1fc01f",
+    "https://deno.land/x/eta@v3.4.0/src/err.ts": "4ac723a18491fe22bb2cedeb9d42f4d5e67274c61625b3ea82acffd98ec48dd7",
+    "https://deno.land/x/eta@v3.4.0/src/file-handling.ts": "f66c6387471d31fade733040ca16803c21c215cdc83235dd9090862c798df452",
+    "https://deno.land/x/eta@v3.4.0/src/index.ts": "4315d16ee52be57b49f77ae392bfd894e27046f4b919ea1b3bb695e76285272e",
+    "https://deno.land/x/eta@v3.4.0/src/parse.ts": "8cb25b4ccf58ea7f08fe9835f7eb8bf45917d6d743d28d1e25cadc9fc908cb32",
+    "https://deno.land/x/eta@v3.4.0/src/render.ts": "be7d45bf0ebf2769422908c1f353eeaff647ed5a7dd05531ccd571848152dc39",
+    "https://deno.land/x/eta@v3.4.0/src/storage.ts": "c40bd31cdd6f1218c86f70067282709e2f2c7fa7eea67547be950e1ed5d4bd4c",
+    "https://deno.land/x/eta@v3.4.0/src/utils.ts": "1994c8d228195558fb6785fb00a97cf21a457df598a6ab1945170f7a4b7f00d9"
+  },
   "workspace": {
     "dependencies": [
       "jsr:@cliffy/command@^1.0.0-rc.7",

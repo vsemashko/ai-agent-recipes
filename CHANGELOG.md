@@ -3,6 +3,41 @@
 All notable changes to the StashAway agent-recipes project are recorded here. Add new entries to the top of the file and group them under meaningful
 headings (for example, Added/Changed/Fixed).
 
+## Unreleased
+
+### Added
+
+- Codex and OpenCode `AGENT.template.md` samples now demonstrate exactly how to embed the shared instructions (`{{AGENTS.md}}`) plus the reusable
+  skills boilerplate (`{{SKILLS_INSTRUCTIONS.template.md}}`), making it easier to add future tools.
+
+### Changed
+
+- Renamed `instructions/GLOBAL_INSTRUCTIONS.md` to `instructions/AGENTS.md` and updated every template, doc, and installer path to treat it as the
+  single managed source.
+- Simplified the template stack: removed `instructions/common/AGENTS.template.md` and the unused Claude `AGENT.template.md`, so per-tool templates now
+  embed the shared instructions directly.
+- Dropped `instructions/codex/CODEX_INSTRUCTIONS.md`; Codex-only guidance now belongs directly inside `instructions/codex/AGENT.template.md`.
+- Updated the installer to render `{{AGENTS.md}}` directly for Claude and Codex, only providing the shared skills partial when required.
+- Refreshed README, CLAUDE.md, CONTRIBUTING.md, `instructions/README.md`, and AGENTS.md to document the new structure and expectations.
+
+## 0.1.2
+
+### Added
+
+- Introduced `instructions/AGENTS.md` as the single source of truth for managed instructions consumed by all AI tool templates.
+- Created `instructions/common/AGENTS.template.md` so Codex, OpenCode, and future tools can share a single agent layout while still injecting
+  tool-specific fragments.
+- Added `instructions/codex/CODEX_INSTRUCTIONS.md` (since removed) and documented how to extend it when Codex-only guidance is needed.
+- Documented the instruction layout in `instructions/README.md` so contributors know where to place new templates or per-tool fragments.
+
+### Changed
+
+- `instructions/claude/CLAUDE.template.md` now acts as a template that renders `{{AGENTS.md}}`, and the CLI injects those instructions for both Claude
+  Code and Codex sync targets.
+- Codex sync now renders the shared agent template, plus any optional Codex instructions fragment, keeping future tool additions consistent.
+- README/CLAUDE/CONTRIBUTING/AGENTS were updated to reflect the reorganized instruction hierarchy and future agent-configuration workflow.
+- README and internal agent guidance now document the shared instructions flow and require contributors to update `CHANGELOG.md` with every change.
+
 ## 0.1.0
 
 ### Added
