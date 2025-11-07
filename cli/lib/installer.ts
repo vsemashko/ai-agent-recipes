@@ -2,13 +2,10 @@ import { exists } from '@std/fs'
 import { dirname, join } from '@std/path'
 import { Confirm } from '@cliffy/prompt'
 import { batchConvertSkills } from './converter.ts'
-import { Eta } from 'eta'
 
 interface SyncSkillsOptions {
   pathReplacements?: Record<string, string>
 }
-
-const eta = new Eta({ autoTrim: false })
 
 export interface InstallConfig {
   version: string
@@ -290,7 +287,7 @@ export class Installer {
     const claudeMdPath = join(repoRoot, 'instructions', 'claude-code', 'CLAUDE.md')
     const skillsDir = join(repoRoot, 'skills')
     const templatesDir = join(repoRoot, 'instructions', 'templates')
-    const agentsTemplatePath = join(templatesDir, 'AGENTS.md.eta')
+    const agentsTemplatePath = join(templatesDir, 'AGENTS.template.md')
 
     try {
       // Read CLAUDE.md (optional)
@@ -496,11 +493,10 @@ export class Installer {
 
   private async renderTemplate(templatePath: string, data: Record<string, unknown>): Promise<string> {
     const template = await this.loadTemplate(templatePath)
-    const rendered = await eta.renderStringAsync(template, data)
-
-    if (typeof rendered !== 'string') {
-      throw new Error(`Failed to render template: ${templatePath}`)
-    }
+    const rendered = template.replace(/{{\s*([\w.]+)\s*}}/g, (_, key) => {
+      const value = data[key]
+      return typeof value === 'string' ? value : ''
+    })
 
     return rendered.trimEnd()
   }

@@ -6,7 +6,7 @@ This section is managed by agent-recipes. Add your custom content above this lin
 
 # Global Instructions
 
-<%~ it.globalInstructions %>
+{{globalInstructions}}
 
 ---
 
@@ -15,7 +15,7 @@ This section is managed by agent-recipes. Add your custom content above this lin
 You’ve got skills.
 **Check this skills list before EVERY task. If a skill matches a certain task at hand, read its SKILL.md and follow all instructions.**
 
-<%~ it.skillsList %>
+{{skillsList}}
 
 ### Skill Usage
 **CRITICAL: Follow this workflow for EVERY task:**
