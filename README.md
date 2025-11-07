@@ -86,18 +86,13 @@ To use a skill, simply ask Claude naturally:
 The CLI automatically checks for updates:
 
 ```bash
-# Check for updates and sync instructions
 agent-recipes sync
-
-# Update to latest version and re-sync everything
-agent-recipes sync --force
 ```
 
 **How it works:**
 
 - Installed as a git repository in `~/.stashaway-agent-recipes/`
-- `sync` checks if remote has new commits
-- `--force` pulls latest changes and re-syncs everything
+- `sync` checks for new commits, pulls them, and refreshes instructions
 - Instructions and skills are automatically updated
 
 ## 📁 What Gets Installed?
@@ -200,7 +195,7 @@ ls ~/.claude/skills/
 ### AGENTS.md not updating for Codex
 
 ```bash
-agent-recipes sync --force
+agent-recipes sync
 cat ~/.codex/AGENTS.md
 ```
 

@@ -1,7 +1,8 @@
 import { Command } from '@cliffy/command'
 import { Table } from '@cliffy/table'
-import { dirname, fromFileUrl, join } from '@std/path'
+import { join } from '@std/path'
 import { exists } from '@std/fs'
+import { Installer } from '../lib/installer.ts'
 
 interface Skill {
   name: string
@@ -61,7 +62,15 @@ export const listCommand = new Command()
   .action(async (options) => {
     console.log('📚 StashAway Agent Recipes\n')
 
-    const repoRoot = dirname(dirname(dirname(fromFileUrl(import.meta.url))))
+    const installer = new Installer()
+    const repoRoot = await installer.findRepositoryRoot()
+
+    if (!repoRoot) {
+      console.log('⚠ Could not locate the skills repository.')
+      console.log('   Run `agent-recipes sync` to refresh your installation.')
+      return
+    }
+
     const skills = await listSkills(repoRoot)
 
     if (skills.length === 0) {

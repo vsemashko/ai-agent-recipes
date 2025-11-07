@@ -170,6 +170,10 @@ export class Installer {
     return Array.from(candidates).filter((path) => path.length > 0)
   }
 
+  async findRepositoryRoot(): Promise<string | null> {
+    return await this.resolveRepositoryRoot()
+  }
+
   private async resolveRepositoryRoot(): Promise<string | null> {
     for (const candidate of this.getRepositoryCandidates()) {
       try {

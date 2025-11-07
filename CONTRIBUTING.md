@@ -214,9 +214,6 @@ The installation logic is in `cli/lib/installer.ts`. Key methods:
 deno run --allow-all main.ts sync
 deno run --allow-all main.ts list
 deno run --allow-all main.ts info
-
-# Test with different flags
-deno run --allow-all main.ts sync --force
 ```
 
 ### Testing Installation
