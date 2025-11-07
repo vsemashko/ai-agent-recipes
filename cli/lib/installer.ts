@@ -2,6 +2,13 @@ import { exists } from '@std/fs'
 import { dirname, join } from '@std/path'
 import { Confirm } from '@cliffy/prompt'
 import { batchConvertSkills } from './converter.ts'
+import { Eta } from 'eta'
+
+interface SyncSkillsOptions {
+  pathReplacements?: Record<string, string>
+}
+
+const eta = new Eta({ autoTrim: false })
 
 export interface InstallConfig {
   version: string
@@ -16,6 +23,8 @@ export class Installer {
   private installDir: string
   private configPath: string
   private binPath: string
+  private templateCache: Map<string, string>
+  private modifyPath: boolean
 
   constructor() {
     this.homeDir = Deno.env.get('HOME') || Deno.env.get('USERPROFILE') || ''
@@ -30,49 +39,10 @@ export class Installer {
       join(this.homeDir, '.stashaway-agent-recipes')
     this.configPath = join(this.installDir, 'config.json')
     this.binPath = join(this.installDir, 'bin')
-  }
+    this.templateCache = new Map()
 
-  private buildSkillsSection(skillsList: string): string {
-    return `## Available Skills
-
-You have access to the following specialized skills. **Before starting any task, review this list to identify relevant skills.**
-
-### Skill Directory
-
-<!-- AUTO-GENERATED SKILLS LIST START -->
-${skillsList}
-<!-- AUTO-GENERATED SKILLS LIST END -->
-
-### Skill Usage Protocol
-
-**CRITICAL: Follow this workflow for EVERY task:**
-
-1. **Pre-Task Check**: Before starting any task, scan the available skills list above
-2. **Match Detection**: Identify if any skill is relevant to the current task based on its description
-3. **Skill Activation**: If a match is found:
-   - Read the full SKILL.md file at the specified path
-   - Follow ALL instructions and best practices defined in that skill
-   - Use any helper scripts or tools mentioned in the skill
-4. **Multiple Skills**: If multiple skills apply, read and integrate guidance from all relevant skills
-5. **No Match**: If no skill matches, proceed with standard approach
-
-### Examples
-
-**Task: "Create a PDF report with charts"**
-→ Match: \`pdf\` skill
-→ Action: Read the pdf SKILL.md and follow its instructions
-
-**Task: "Check if deployment is rightsized"**
-→ Match: \`rightsize\` skill
-→ Action: Read the rightsize SKILL.md and follow its instructions
-
-### Important Notes
-
-- Skills contain expert knowledge and best practices - always defer to skill instructions when available
-- Skills may include helper scripts, templates, or specific tool recommendations - use them
-- Read the SKILL.md completely before starting work - it may contain critical requirements
-- Some skills have dependencies or prerequisites listed in their documentation
-`
+    const modifyPathEnv = Deno.env.get('AGENT_RECIPES_MODIFY_PATH')
+    this.modifyPath = modifyPathEnv === undefined ? true : modifyPathEnv !== '0'
   }
 
   async isInstalled(): Promise<boolean> {
@@ -159,6 +129,10 @@ ${skillsList}
   async ensureDirectories(): Promise<void> {
     await Deno.mkdir(this.installDir, { recursive: true })
     await Deno.mkdir(this.binPath, { recursive: true })
+  }
+
+  shouldModifyPath(): boolean {
+    return this.modifyPath
   }
 
   async addToPath(): Promise<void> {
@@ -315,42 +289,28 @@ ${skillsList}
     // Auto-generate AGENTS.md from CLAUDE.md + skills
     const claudeMdPath = join(repoRoot, 'instructions', 'claude-code', 'CLAUDE.md')
     const skillsDir = join(repoRoot, 'skills')
+    const templatesDir = join(repoRoot, 'instructions', 'templates')
+    const agentsTemplatePath = join(templatesDir, 'AGENTS.md.eta')
 
     try {
       // Read CLAUDE.md (optional)
-      const claudeMdContent = await exists(claudeMdPath)
-        ? await Deno.readTextFile(claudeMdPath)
-        : ''
+      const claudeMdContent = await exists(claudeMdPath) ? await Deno.readTextFile(claudeMdPath) : ''
 
       // Convert all skills with codex-specific paths
       const results = await batchConvertSkills(
         skillsDir,
         'agent-md',
-        (skillDirName) => `~/.codex/skills/${skillDirName}/SKILL.md`,
+        (skillDirName) => `~/.codex/skills/${this.getManagedSkillDirName(skillDirName)}/SKILL.md`,
       )
 
       // Build skills list
       // deno-lint-ignore no-explicit-any
       const skillsList = results.map((r: { output: any }) => r.output).join('\n')
 
-      // Build skills section with auto-generated list
-      const skillsSection = this.buildSkillsSection(skillsList)
-
-      // Build managed content
-      const managedContent = `# StashAway Agent Instructions
-
-This section is managed by agent-recipes. Add your custom content above this line.
-
----
-
-# Global Instructions
-
-${claudeMdContent}
-
----
-
-${skillsSection}
-`
+      const managedContent = await this.renderTemplate(agentsTemplatePath, {
+        globalInstructions: claudeMdContent.trim(),
+        skillsList: skillsList.trim(),
+      })
 
       // Sync with managed section
       const targetFile = join(targetPath, 'AGENTS.md')
@@ -358,7 +318,11 @@ ${skillsSection}
 
       // Copy skills to .codex/skills directory
       const targetSkillsDir = join(targetPath, 'skills')
-      await this.syncSkills(skillsDir, targetSkillsDir)
+      const codexPathReplacements = {
+        '~/.claude/skills': '~/.codex/skills',
+        '~/.claude': '~/.codex',
+      }
+      await this.syncSkills(skillsDir, targetSkillsDir, { pathReplacements: codexPathReplacements })
 
       console.log(`  ✓ Synced AGENTS.md with global instructions + ${results.length} skill(s)`)
     } catch (error) {
@@ -433,7 +397,7 @@ ${skillsSection}
   /**
    * Sync skills ensuring managed copies use sa_ prefix (always replace our managed skills)
    */
-  private async syncSkills(sourceDir: string, targetDir: string): Promise<void> {
+  private async syncSkills(sourceDir: string, targetDir: string, options?: SyncSkillsOptions): Promise<void> {
     await Deno.mkdir(targetDir, { recursive: true })
 
     // Get list of skills from repo
@@ -441,7 +405,7 @@ ${skillsSection}
     for await (const entry of Deno.readDir(sourceDir)) {
       if (entry.isDirectory) {
         const dirName = entry.name
-        const targetName = dirName.startsWith('sa_') ? dirName : `sa_${dirName}`
+        const targetName = this.getManagedSkillDirName(dirName)
         repoSkills.push({ dirName, targetName })
       }
     }
@@ -456,7 +420,7 @@ ${skillsSection}
         await Deno.remove(targetPath, { recursive: true })
       }
 
-      await this.copyDirectory(sourcePath, targetPath)
+      await this.copyDirectory(sourcePath, targetPath, options)
       console.log(`  ✓ Synced skill: ${targetName}`)
     }
 
@@ -473,7 +437,7 @@ ${skillsSection}
     }
   }
 
-  private async copyDirectory(source: string, target: string): Promise<void> {
+  private async copyDirectory(source: string, target: string, options?: SyncSkillsOptions): Promise<void> {
     await Deno.mkdir(target, { recursive: true })
 
     for await (const entry of Deno.readDir(source)) {
@@ -481,11 +445,64 @@ ${skillsSection}
       const targetPath = join(target, entry.name)
 
       if (entry.isDirectory) {
-        await this.copyDirectory(sourcePath, targetPath)
+        await this.copyDirectory(sourcePath, targetPath, options)
       } else {
-        await Deno.copyFile(sourcePath, targetPath)
+        await this.copyFileWithReplacements(sourcePath, targetPath, options?.pathReplacements)
       }
     }
+  }
+
+  private getManagedSkillDirName(dirName: string): string {
+    return dirName.startsWith('sa_') ? dirName : `sa_${dirName}`
+  }
+
+  private shouldTransformFile(filePath: string): boolean {
+    const lower = filePath.toLowerCase()
+    return lower.endsWith('.md') || lower.endsWith('.mdx') || lower.endsWith('.mdc') || lower.endsWith('.txt')
+  }
+
+  private applyReplacements(content: string, replacements: Record<string, string>): string {
+    let updated = content
+    const ordered = Object.entries(replacements).sort((a, b) => b[0].length - a[0].length)
+    for (const [needle, replacement] of ordered) {
+      updated = updated.split(needle).join(replacement)
+    }
+    return updated
+  }
+
+  private async copyFileWithReplacements(
+    sourcePath: string,
+    targetPath: string,
+    replacements?: Record<string, string>,
+  ): Promise<void> {
+    if (!replacements || !this.shouldTransformFile(sourcePath)) {
+      await Deno.copyFile(sourcePath, targetPath)
+      return
+    }
+
+    const content = await Deno.readTextFile(sourcePath)
+    const updatedContent = this.applyReplacements(content, replacements)
+    await Deno.writeTextFile(targetPath, updatedContent)
+  }
+
+  private async loadTemplate(templatePath: string): Promise<string> {
+    const cached = this.templateCache.get(templatePath)
+    if (cached) return cached
+
+    const content = await Deno.readTextFile(templatePath)
+    this.templateCache.set(templatePath, content)
+    return content
+  }
+
+  private async renderTemplate(templatePath: string, data: Record<string, unknown>): Promise<string> {
+    const template = await this.loadTemplate(templatePath)
+    const rendered = await eta.renderStringAsync(template, data)
+
+    if (typeof rendered !== 'string') {
+      throw new Error(`Failed to render template: ${templatePath}`)
+    }
+
+    return rendered.trimEnd()
   }
 
   async checkForUpdates(): Promise<

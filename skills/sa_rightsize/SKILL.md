@@ -1,6 +1,6 @@
 ---
 name: rightsize
-description: Check if Kubernetes deployment resources match RightSize API recommendations and update configurations
+description: Check if the Kubernetes deployment resources for the service match the RightSize API recommendations, and update the configurations if they don’t
 ---
 
 # RightSize Resource Checker

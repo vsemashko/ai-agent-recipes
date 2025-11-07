@@ -35,7 +35,11 @@ export const syncCommand = new Command()
         await installer.saveConfig(config)
 
         // Add to PATH
-        await installer.addToPath()
+        if (installer.shouldModifyPath()) {
+          await installer.addToPath()
+        } else {
+          console.log('ℹ Skipping PATH updates (AGENT_RECIPES_MODIFY_PATH=0)')
+        }
 
         // Sync instructions
         const updatedConfig = await installer.syncInstructions(tools, config)
