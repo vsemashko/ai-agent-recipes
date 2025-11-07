@@ -33,21 +33,11 @@ export function parseSkillFrontmatter(content: string): ParsedSkill | null {
 }
 
 export function skillToAgentMd(parsed: ParsedSkill): string {
-  const { frontmatter, body } = parsed
+  const { frontmatter } = parsed
 
-  // Extract relevant sections from body
-  // Keep "When to Use", "How It Works", "Example Usage", etc.
-  // Filter out meta content that's not useful in AGENTS.md
-
-  return `## ${frontmatter.name}
-
-${frontmatter.description}
-
-### Usage
-Use this skill by invoking: \`/${frontmatter.name}\` or mentioning "${frontmatter.name}" in your request.
-
-${body}
-`
+  // Only include name and description - not the full body
+  // Full skill instructions are available in the skills directory
+  return `- **${frontmatter.name}**: ${frontmatter.description}`
 }
 
 export function skillToCursorMdc(parsed: ParsedSkill): string {

@@ -1,6 +1,7 @@
 import { exists } from '@std/fs'
 import { dirname, join } from '@std/path'
 import { Confirm } from '@cliffy/prompt'
+import { batchConvertSkills } from './converter.ts'
 
 export interface InstallConfig {
   version: string
@@ -29,6 +30,31 @@ export class Installer {
       join(this.homeDir, '.stashaway-agent-recipes')
     this.configPath = join(this.installDir, 'config.json')
     this.binPath = join(this.installDir, 'bin')
+  }
+
+  private buildAgentsMdContent(claudeMdContent: string, agentsMdContent: string, skillsList: string): string {
+    return `# StashAway Agent Instructions
+
+This section is managed by agent-recipes. Add your custom content above this line.
+
+---
+
+# Global Instructions
+
+${claudeMdContent}
+
+---
+
+${agentsMdContent}
+
+---
+
+# Available Skills
+
+The following skills are available. For full instructions, read the skill's SKILL.md file from \`~/.codex/skills/sa_<skill-name>/SKILL.md\`.
+
+${skillsList}
+`
   }
 
   async isInstalled(): Promise<boolean> {
@@ -268,25 +294,19 @@ export class Installer {
     const targetPath = join(this.homeDir, '.codex')
     await Deno.mkdir(targetPath, { recursive: true })
 
-    // Auto-generate AGENTS.md from CLAUDE.md + skills
+    // Auto-generate AGENTS.md from CLAUDE.md + AGENTS.md + skills
     const claudeMdPath = join(repoRoot, 'instructions', 'claude-code', 'CLAUDE.md')
+    const agentsMdPath = join(repoRoot, 'instructions', 'AGENTS.md')
     const skillsDir = join(repoRoot, 'skills')
 
-    if (!await exists(skillsDir)) {
-      console.log('ℹ No skills found to sync for Codex')
-      return
-    }
-
-    // Import converter dynamically
-    const converterPath = join(dirname(import.meta.dirname!), 'lib', 'converter.ts')
-    const { batchConvertSkills } = await import(converterPath)
-
     try {
-      // Read CLAUDE.md if it exists
-      let claudeMdContent = ''
-      if (await exists(claudeMdPath)) {
-        claudeMdContent = await Deno.readTextFile(claudeMdPath)
-      }
+      // Read CLAUDE.md (optional)
+      const claudeMdContent = await exists(claudeMdPath)
+        ? await Deno.readTextFile(claudeMdPath)
+        : ''
+
+      // Read AGENTS.md (required)
+      const agentsMdContent = await Deno.readTextFile(agentsMdPath)
 
       // Convert all skills
       const results = await batchConvertSkills(skillsDir, 'agent-md')
@@ -296,21 +316,19 @@ export class Installer {
         return
       }
 
-      // Build managed content: CLAUDE.md + skills
-      const managedContent = [
-        '# StashAway Agent Instructions\n',
-        'This section is managed by agent-recipes. Add your custom content above this line.\n',
-        '---\n',
-        claudeMdContent,
-        '\n---\n',
-        '# Available Skills\n',
-        // deno-lint-ignore no-explicit-any
-        results.map((r: { output: any }) => r.output).join('\n\n---\n\n'),
-      ].join('\n')
+      // deno-lint-ignore no-explicit-any
+      const skillsList = results.map((r: { output: any }) => r.output).join('\n')
+
+      // Build managed content
+      const managedContent = this.buildAgentsMdContent(claudeMdContent, agentsMdContent, skillsList)
 
       // Sync with managed section
       const targetFile = join(targetPath, 'AGENTS.md')
       await this.syncManagedFile(targetFile, managedContent, 'Codex AGENTS.md')
+
+      // Copy skills to .codex/skills directory
+      const targetSkillsDir = join(targetPath, 'skills')
+      await this.syncSkills(skillsDir, targetSkillsDir)
 
       console.log(`  ✓ Synced AGENTS.md with global instructions + ${results.length} skill(s)`)
     } catch (error) {
