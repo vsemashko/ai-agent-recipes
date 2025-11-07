@@ -5,6 +5,7 @@ A centralized repository for reusable configurations, instructions, and skills f
 ## 🎯 What is This?
 
 Agent Recipes makes it easy to:
+
 - 🤖 Configure AI coding assistants with StashAway's standards and best practices
 - 🔧 Share reusable skills across your team
 - 📚 Maintain consistent AI agent behavior across projects
@@ -16,7 +17,10 @@ Agent Recipes makes it easy to:
 
 ```bash
 # Option 1: Quick install (recommended)
-curl https://agent-recipes.stashaway.internal | sh
+command -v glab >/dev/null || brew install glab
+glab api --hostname gitlab.stashaway.com \
+  "projects/vladimir.semashko%2Fstashaway-agent-recipes/repository/files/install.sh/raw?ref=main" \
+  | sh
 
 # Option 2: From source
 git clone git@gitlab.stashaway.com:vladimir.semashko/stashaway-agent-recipes.git
@@ -25,6 +29,7 @@ cd stashaway-agent-recipes
 ```
 
 After installation, restart your shell:
+
 ```bash
 source ~/.zshrc  # or ~/.bashrc
 ```
@@ -56,6 +61,7 @@ Skills provide specialized guidance for common StashAway workflows. Browse avail
 - **commit-message** - Generate properly formatted commit messages
 
 To use a skill, simply ask Claude naturally:
+
 ```
 "Can you check if this service is rightsized?"
 "Create a commit for these changes"
@@ -64,11 +70,13 @@ To use a skill, simply ask Claude naturally:
 ## 🛠️ Supported AI Tools
 
 ### Claude Code
-- **Location**: `~/.config/claude-code/`
+
+- **Location**: `~/.claude/`
 - **Format**: Global instructions (CLAUDE.md) + skills directory
 - **Setup**: Automatic via `agent-recipes sync`
 
 ### Codex CLI
+
 - **Location**: `~/.codex/`
 - **Format**: Auto-generated AGENTS.md from global instructions + skills
 - **Setup**: Automatic via `agent-recipes sync`
@@ -86,6 +94,7 @@ agent-recipes sync --force
 ```
 
 **How it works:**
+
 - Installed as a git repository in `~/.stashaway-agent-recipes/`
 - `sync` checks if remote has new commits
 - `--force` pulls latest changes and re-syncs everything
@@ -94,13 +103,16 @@ agent-recipes sync --force
 ## 📁 What Gets Installed?
 
 ### For Claude Code Users
-- Global instructions → `~/.config/claude-code/CLAUDE.md`
-- Skills directory → `~/.config/claude-code/skills/` (symlinked)
+
+- Global instructions → `~/.claude/CLAUDE.md`
+- Skills directory → `~/.claude/skills/` (managed copies with `sa_` prefix)
 
 ### For Codex CLI Users
+
 - Combined file → `~/.codex/AGENTS.md` (auto-generated from instructions + skills)
 
 ### CLI Tool
+
 - Installed to `~/.stashaway-agent-recipes/`
 - Binary at `~/.stashaway-agent-recipes/bin/agent-recipes`
 - Added to your PATH automatically
@@ -109,26 +121,21 @@ agent-recipes sync --force
 
 ### Global Instructions (CLAUDE.md / AGENTS.md)
 
-The synced files use **managed sections**. You can safely add your own content above the managed section marker:
+The synced files use **managed sections**. You can safely add your own content above the custom instructions tag:
 
 ```markdown
 # My Custom Instructions
 
-Add your team-specific guidelines here.
-Everything above the marker is safe!
+- Add team policies here
+- Everything above the tag stays untouched
 
-## My Company Rules
-- Rule 1
-- Rule 2
-
----
-
-<!-- AGENT-RECIPES-MANAGED-START -->
-[This section is automatically replaced when you sync]
-<!-- AGENT-RECIPES-MANAGED-END -->
+<stashaway-recipes-managed-section>
+[Managed instructions live here and are replaced on sync]
+</stashaway-recipes-managed-section>
 ```
 
 **On sync:**
+
 - ✅ Your content above the marker is preserved
 - ✅ Managed section is updated with latest from repo
 - ✅ No conflicts, no prompts needed
@@ -138,8 +145,9 @@ Everything above the marker is safe!
 Skills with the `sa_` prefix are managed by agent-recipes. To add custom skills:
 
 **Option 1: Add alongside (recommended)**
+
 ```bash
-~/.config/claude-code/skills/
+~/.claude/skills/
 ├── sa_rightsize/        # Managed - updated on sync
 ├── sa_commit-message/   # Managed - updated on sync
 ├── my-custom-skill/     # Yours - never touched!
@@ -147,9 +155,10 @@ Skills with the `sa_` prefix are managed by agent-recipes. To add custom skills:
 ```
 
 **Option 2: Customize a managed skill**
+
 ```bash
 # Copy and remove sa_ prefix
-cp -r ~/.config/claude-code/skills/sa_rightsize ~/.config/claude-code/skills/rightsize
+cp -r ~/.claude/skills/sa_rightsize ~/.claude/skills/rightsize
 
 # Now edit rightsize/ - it's yours!
 # Note: You won't get automatic updates for this skill
@@ -158,20 +167,23 @@ cp -r ~/.config/claude-code/skills/sa_rightsize ~/.config/claude-code/skills/rig
 ## 🤝 Contributing
 
 We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for:
+
 - How to add new skills
 - Development setup
 - Testing guidelines
 - Code style guide
 
 Quick overview:
+
 1. Create a feature branch: `<type>/<ticket>-<description>`
-2. Add your skill in `skills/my-skill/SKILL.md`
+2. Add your skill in `skills/sa_my-skill/SKILL.md` (keep the `name` field without the prefix)
 3. Test with `agent-recipes sync`
 4. Submit a merge request
 
 ## 🐛 Troubleshooting
 
 ### CLI not found after installation
+
 ```bash
 source ~/.zshrc  # or ~/.bashrc
 # Or manually add to PATH
@@ -179,12 +191,14 @@ export PATH="$PATH:$HOME/.stashaway-agent-recipes/bin"
 ```
 
 ### Skills not showing up in Claude Code
+
 ```bash
 agent-recipes sync
-ls ~/.config/claude-code/skills/
+ls ~/.claude/skills/
 ```
 
 ### AGENTS.md not updating for Codex
+
 ```bash
 agent-recipes sync --force
 cat ~/.codex/AGENTS.md

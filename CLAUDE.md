@@ -4,33 +4,32 @@ This file contains instructions for working on the StashAway Agent Recipes repos
 
 ## Repository Overview
 
-**Repository**: stashaway-agent-recipes
-**Purpose**: Centralized repository for reusable AI agent configurations, instructions, skills, and tools for StashAway engineering teams.
+**Repository**: stashaway-agent-recipes **Purpose**: Centralized repository for reusable AI agent configurations, instructions, skills, and tools for
+StashAway engineering teams.
 
 ## Project Structure
 
 ```
 stashaway-agent-recipes/
-├── cli/                       # CLI application (Deno + Cliffy)
-│   ├── main.ts               # Entry point
-│   ├── commands/             # Command implementations
+├── main.ts                  # CLI entry point
+├── cli/                     # CLI modules (commands + shared libs)
+│   ├── commands/            # Command implementations
 │   │   ├── sync.ts          # Install/update/sync command
 │   │   ├── list.ts          # List skills
 │   │   ├── convert.ts       # Format conversion
 │   │   └── info.ts          # Show info
-│   └── lib/                  # Shared utilities
-│       ├── installer.ts      # Installation logic
-│       └── converter.ts      # Format conversions
-├── skills/                   # Skill definitions
-│   ├── rightsize/           # RightSize checker skill
-│   └── commit-message/      # Commit message formatter
-├── instructions/             # Platform-specific instructions
+│   └── lib/                 # Shared utilities
+│       ├── installer.ts     # Installation logic
+│       └── converter.ts     # Format conversions
+├── skills/                  # Skill definitions (managed with sa_ prefix)
+│   ├── sa_rightsize/        # RightSize checker skill
+│   └── sa_commit-message/   # Commit message formatter
+├── instructions/            # Platform-specific instructions
 │   └── claude-code/         # Claude Code global instructions
 │       └── CLAUDE.md        # Global instructions template
 ├── install.sh               # Installation script
 ├── CLAUDE.md                # This file
 ├── AGENTS.md                # Agent definitions
-├── PLAN_claude.md           # Implementation plan
 └── README.md                # User documentation
 ```
 
@@ -52,9 +51,6 @@ For detailed development instructions, including adding skills, modifying the CL
 # Install Deno if not already installed
 curl -fsSL https://deno.land/install.sh | sh
 
-# Navigate to CLI directory
-cd cli
-
 # Run CLI in development mode
 deno task dev --help
 
@@ -64,9 +60,9 @@ deno task build
 
 ### Adding a New Skill
 
-1. **Create skill directory**:
+1. **Create skill directory** (managed skills use `sa_` prefix, but keep the `name` in frontmatter without it):
    ```bash
-   mkdir skills/my-skill
+   mkdir skills/sa_my-skill
    ```
 
 2. **Create SKILL.md with frontmatter**:
@@ -79,12 +75,15 @@ deno task build
    # My Skill
 
    ## When to Use
+
    [When should this skill be invoked?]
 
    ## How It Works
+
    [Detailed implementation instructions]
 
    ## Example Usage
+
    [Example interactions]
    ```
 
@@ -96,7 +95,7 @@ deno task build
 4. **Verify format conversion** (Codex AGENTS.md is auto-generated during sync):
    ```bash
    # Preview how skill will appear in AGENTS.md
-   agent-recipes convert skills/my-skill/SKILL.md --format agent-md
+   agent-recipes convert skills/sa_my-skill/SKILL.md --format agent-md
    ```
 
 ### Adding a New CLI Command
@@ -123,7 +122,6 @@ deno task build
 
 3. **Test the command**:
    ```bash
-   cd cli
    deno run --allow-all main.ts my-command
    ```
 
@@ -139,17 +137,26 @@ The installation logic is in `cli/lib/installer.ts`. Key methods:
 - `pullLatestChanges()`: Pull latest changes from origin
 
 **Update Mechanism:**
+
 - Installation directory is a git repository
 - `checkForUpdates()` fetches from origin and compares commits
 - `pullLatestChanges()` does a hard reset to `origin/main` (or `origin/master`)
 - Supports both `main` and `master` as default branches
 
 When modifying:
+
 1. Preserve backward compatibility
 2. Test on fresh install
 3. Test on update scenario
 4. Test with both main and master branches
 5. Verify PATH modification works
+
+## Recording Changes
+
+- Update `CHANGELOG.md` whenever repository-managed skills or global instructions are added or modified. Summaries should highlight user-facing impact (for example, new skills, major rewrites, notable fixes).
+- Keep the `Unreleased` section current during development. Move entries into a versioned section (for example, `## 0.2.0`) during release prep.
+- Include any manual follow-up that users must perform (like rerunning `agent-recipes sync`) inside the changelog entry so upgrade notes remain actionable.
+- Before bumping versions, ensure the changelog captures instruction changes, skill updates, and CLI behaviour adjustments.
 
 ## Code Style
 
@@ -163,8 +170,6 @@ When modifying:
 ## Testing
 
 ```bash
-cd cli
-
 # Run tests
 deno test
 
@@ -178,6 +183,7 @@ deno coverage coverage
 ## Skill Format Specification
 
 ### Frontmatter (Required)
+
 ```yaml
 ---
 name: skill-name        # Lowercase, hyphenated
@@ -186,6 +192,7 @@ description: Brief one-line description
 ```
 
 ### Content Sections (Recommended)
+
 1. **When to Use**: Trigger conditions
 2. **How It Works**: Step-by-step process
 3. **Example Usage**: Sample interactions
@@ -195,45 +202,54 @@ description: Brief one-line description
 ## Platform-Specific Notes
 
 ### Claude Code
+
 - Instructions go to `~/.config/claude-code/CLAUDE.md`
 - Skills symlinked from repository `skills/` directory
 - Uses CLAUDE.md + skills/ format (NOT AGENTS.md)
 
 ### Codex CLI
+
 - AGENTS.md auto-generated and synced to `~/.codex/AGENTS.md`
 - Generated from all skills during sync
 - Uses markdown format (AGENTS.md)
 
 ### Cursor
+
 - **Status**: Support deferred to future release
 - Project-specific only (no global config)
 - Uses `.cursor/rules/*.mdc` format
 
 ## Release Process
 
-1. **Update version**:
-   - Update version in `cli/deno.json`
-   - Update VERSION constant in `cli/main.ts`
+1. **Finalize changelog**:
+   - Move entries from `## Unreleased` to a new version section in `CHANGELOG.md`
+   - Summarize notable instruction updates, new/updated skills, and CLI changes
 
-2. **Test thoroughly**:
+2. **Update version numbers**:
+   - Update version in `deno.json` (manual edit; no automated helper yet)
+   - Update VERSION constant in `main.ts`
+
+3. **Test thoroughly**:
    - Test installation from scratch
    - Test update scenario
    - Test all commands
    - Test with each AI tool
 
-3. **Create release**:
+4. **Create release**:
    - Tag with version: `git tag v0.1.0`
    - Push tag: `git push origin v0.1.0`
    - Create release in GitLab
 
-4. **Update documentation**:
+5. **Update documentation**:
    - Update README.md if needed
    - Update PLAN_claude.md if architecture changed
 
 ## Troubleshooting
 
 ### Deno Permission Errors
+
 Add necessary permissions to command:
+
 ```bash
 deno run --allow-read --allow-write --allow-env --allow-run main.ts
 ```
@@ -241,15 +257,17 @@ deno run --allow-read --allow-write --allow-env --allow-run main.ts
 Or use `--allow-all` for development.
 
 ### Import Errors
+
 Ensure using JSR imports:
+
 ```typescript
-import { Command } from '@cliffy/command'  // ✅ Correct
-import { Command } from 'https://deno.land/x/cliffy'  // ❌ Old style
+import { Command } from '@cliffy/command' // ✅ Correct
+import { Command } from 'https://deno.land/x/cliffy' // ❌ Old style
 ```
 
 ### Build Errors
+
 ```bash
-cd cli
 rm -rf dist/
 deno task build
 ```
@@ -265,20 +283,25 @@ deno task build
 ## Important Conventions
 
 ### Branch Naming
+
 ```
 <type>/<ticket>-<description>
 ```
+
 Example: `feat/SA-123-add-new-skill`
 
 ### Commit Messages
+
 ```
 <type>: <ticket> <subject>
 
 <body>
 ```
+
 Example: `feat: SA-123 Add database migration skill`
 
 ### Skill Naming
+
 - Lowercase with hyphens
 - Descriptive and concise
 - Example: `rightsize`, `commit-message`, `db-migration`
@@ -299,6 +322,7 @@ Example: `feat: SA-123 Add database migration skill`
 ## Architecture Decisions
 
 ### Why Deno?
+
 - TypeScript native
 - Secure by default (explicit permissions)
 - Modern standard library
@@ -306,21 +330,24 @@ Example: `feat: SA-123 Add database migration skill`
 - Consistency with stash CLI
 
 ### Why Cliffy?
+
 - Excellent TypeScript support
 - Rich features (prompts, tables, colors)
 - Well-maintained
 - Used by stash CLI
 
 ### Why Multiple Formats?
+
 Different AI tools use different formats. We maintain Claude Code format as the source of truth and convert to other formats as needed.
 
 ## Future Enhancements
 
 See PLAN_claude.md for:
+
 - Short-term enhancements
 - Medium-term features
 - Long-term vision
 
 ---
 
-*This repository is the foundation for standardized AI assistance across StashAway engineering.*
+_This repository is the foundation for standardized AI assistance across StashAway engineering._

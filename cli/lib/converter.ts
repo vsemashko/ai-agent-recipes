@@ -32,22 +32,15 @@ export function parseSkillFrontmatter(content: string): ParsedSkill | null {
   }
 }
 
-export function skillToAgentMd(parsed: ParsedSkill): string {
-  const { frontmatter, body } = parsed
+export function skillToAgentMd(parsed: ParsedSkill, skillPath?: string): string {
+  const { frontmatter } = parsed
 
-  // Extract relevant sections from body
-  // Keep "When to Use", "How It Works", "Example Usage", etc.
-  // Filter out meta content that's not useful in AGENTS.md
-
-  return `## ${frontmatter.name}
-
-${frontmatter.description}
-
-### Usage
-Use this skill by invoking: \`/${frontmatter.name}\` or mentioning "${frontmatter.name}" in your request.
-
-${body}
-`
+  // Only include name and description - not the full body
+  // Full skill instructions are available in the skills directory
+  if (skillPath) {
+    return `- **${frontmatter.name}** (\`${skillPath}\`) - ${frontmatter.description}`
+  }
+  return `- **${frontmatter.name}** - ${frontmatter.description}`
 }
 
 export function skillToCursorMdc(parsed: ParsedSkill): string {
@@ -76,6 +69,7 @@ export function skillToCodexAgent(parsed: ParsedSkill): object {
 export async function convertSkillFile(
   skillPath: string,
   format: 'agent-md' | 'cursor-mdc' | 'codex-json',
+  displayPath?: string,
 ): Promise<string | object> {
   if (!await exists(skillPath)) {
     throw new Error(`Skill file not found: ${skillPath}`)
@@ -90,7 +84,7 @@ export async function convertSkillFile(
 
   switch (format) {
     case 'agent-md':
-      return skillToAgentMd(parsed)
+      return skillToAgentMd(parsed, displayPath)
     case 'cursor-mdc':
       return skillToCursorMdc(parsed)
     case 'codex-json':
@@ -103,15 +97,17 @@ export async function convertSkillFile(
 export async function batchConvertSkills(
   skillsDir: string,
   format: 'agent-md' | 'cursor-mdc' | 'codex-json',
+  displayPathTemplate?: (skillDirName: string) => string,
 ): Promise<Array<{ skill: string; output: string | object }>> {
   const results: Array<{ skill: string; output: string | object }> = []
 
   for await (const entry of Deno.readDir(skillsDir)) {
     if (entry.isDirectory) {
       const skillFile = join(skillsDir, entry.name, 'SKILL.md')
+      const displayPath = displayPathTemplate ? displayPathTemplate(entry.name) : undefined
 
       try {
-        const output = await convertSkillFile(skillFile, format)
+        const output = await convertSkillFile(skillFile, format, displayPath)
         results.push({ skill: entry.name, output })
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)

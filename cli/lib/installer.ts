@@ -1,12 +1,14 @@
 import { exists } from '@std/fs'
 import { dirname, join } from '@std/path'
 import { Confirm } from '@cliffy/prompt'
+import { batchConvertSkills } from './converter.ts'
 
 export interface InstallConfig {
   version: string
   installedTools: string[]
   lastUpdateCheck: string
   installPath: string
+  customPaths?: Record<string, string>
 }
 
 export class Installer {
@@ -28,6 +30,49 @@ export class Installer {
       join(this.homeDir, '.stashaway-agent-recipes')
     this.configPath = join(this.installDir, 'config.json')
     this.binPath = join(this.installDir, 'bin')
+  }
+
+  private buildSkillsSection(skillsList: string): string {
+    return `## Available Skills
+
+You have access to the following specialized skills. **Before starting any task, review this list to identify relevant skills.**
+
+### Skill Directory
+
+<!-- AUTO-GENERATED SKILLS LIST START -->
+${skillsList}
+<!-- AUTO-GENERATED SKILLS LIST END -->
+
+### Skill Usage Protocol
+
+**CRITICAL: Follow this workflow for EVERY task:**
+
+1. **Pre-Task Check**: Before starting any task, scan the available skills list above
+2. **Match Detection**: Identify if any skill is relevant to the current task based on its description
+3. **Skill Activation**: If a match is found:
+   - Read the full SKILL.md file at the specified path
+   - Follow ALL instructions and best practices defined in that skill
+   - Use any helper scripts or tools mentioned in the skill
+4. **Multiple Skills**: If multiple skills apply, read and integrate guidance from all relevant skills
+5. **No Match**: If no skill matches, proceed with standard approach
+
+### Examples
+
+**Task: "Create a PDF report with charts"**
+→ Match: \`pdf\` skill
+→ Action: Read the pdf SKILL.md and follow its instructions
+
+**Task: "Check if deployment is rightsized"**
+→ Match: \`rightsize\` skill
+→ Action: Read the rightsize SKILL.md and follow its instructions
+
+### Important Notes
+
+- Skills contain expert knowledge and best practices - always defer to skill instructions when available
+- Skills may include helper scripts, templates, or specific tool recommendations - use them
+- Read the SKILL.md completely before starting work - it may contain critical requirements
+- Some skills have dependencies or prerequisites listed in their documentation
+`
   }
 
   async isInstalled(): Promise<boolean> {
@@ -58,8 +103,7 @@ export class Installer {
 
     // Check for Claude Code
     const claudeCodePaths = [
-      join(this.homeDir, '.config', 'claude-code'),
-      join(this.homeDir, '.claude-code'),
+      join(this.homeDir, '.claude'),
     ]
     for (const path of claudeCodePaths) {
       if (await exists(path)) {
@@ -144,12 +188,79 @@ export class Installer {
     }
   }
 
+  private getRepositoryCandidates(): string[] {
+    const candidates = new Set<string>()
+    if (this.installDir) {
+      candidates.add(join(this.installDir, 'repo'))
+      candidates.add(this.installDir)
+    }
+    const runtimeRoot = join(dirname(dirname(import.meta.dirname!)))
+    candidates.add(runtimeRoot)
+    return Array.from(candidates).filter((path) => path.length > 0)
+  }
+
+  private async resolveRepositoryRoot(): Promise<string | null> {
+    for (const candidate of this.getRepositoryCandidates()) {
+      try {
+        if (await exists(join(candidate, 'instructions'))) {
+          return candidate
+        }
+        if (await exists(join(candidate, 'skills'))) {
+          return candidate
+        }
+      } catch {
+        // Ignore and continue checking other candidates
+      }
+    }
+    return null
+  }
+
+  private async resolveGitRepository(): Promise<string | null> {
+    for (const candidate of this.getRepositoryCandidates()) {
+      try {
+        if (await exists(join(candidate, '.git'))) {
+          return candidate
+        }
+      } catch {
+        // Ignore and continue checking other candidates
+      }
+    }
+    return null
+  }
+
   async syncInstructions(tools: string[], config: InstallConfig): Promise<InstallConfig> {
     console.log('\n📝 Syncing instructions...\n')
 
-    const repoRoot = join(dirname(dirname(import.meta.dirname!)))
+    const repoRoot = await this.resolveRepositoryRoot()
+    if (!repoRoot) {
+      console.log('  ⚠ Could not locate agent-recipes repository content. Skipping sync.')
+      return config
+    }
 
+    const installedTools = Array.from(config.installedTools ?? [])
     for (const tool of tools) {
+      if (!installedTools.includes(tool)) {
+        installedTools.push(tool)
+      }
+    }
+
+    const detectedTools = await this.detectAITools()
+    const newlyDetected: string[] = []
+    for (const tool of detectedTools) {
+      if (!installedTools.includes(tool)) {
+        installedTools.push(tool)
+        newlyDetected.push(tool)
+      }
+    }
+
+    if (newlyDetected.length > 0) {
+      const label = newlyDetected.length === 1 ? 'tool' : 'tools'
+      console.log(
+        `  ✓ Detected new ${label}: ${newlyDetected.join(', ')} (auto-added to sync list)`,
+      )
+    }
+
+    for (const tool of installedTools) {
       try {
         if (tool === 'claude-code') {
           await this.syncClaudeCode(repoRoot)
@@ -161,7 +272,10 @@ export class Installer {
       }
     }
 
-    return config
+    return {
+      ...config,
+      installedTools,
+    }
   }
 
   private async syncClaudeCode(repoRoot: string): Promise<void> {
@@ -171,7 +285,7 @@ export class Installer {
       return
     }
 
-    const targetPath = join(this.homeDir, '.config', 'claude-code')
+    const targetPath = join(this.homeDir, '.claude')
     await Deno.mkdir(targetPath, { recursive: true })
 
     // Sync CLAUDE.md with managed section
@@ -185,7 +299,7 @@ export class Installer {
     // Always sync (creates file if missing, updates if exists)
     await this.syncManagedFile(claudeMdTarget, ourContent, 'Claude Code CLAUDE.md')
 
-    // Sync skills with sa_ prefix
+    // Sync skills (managed copies keep sa_ prefix)
     const skillsSource = join(repoRoot, 'skills')
     const skillsTarget = join(targetPath, 'skills')
 
@@ -202,45 +316,49 @@ export class Installer {
     const claudeMdPath = join(repoRoot, 'instructions', 'claude-code', 'CLAUDE.md')
     const skillsDir = join(repoRoot, 'skills')
 
-    if (!await exists(skillsDir)) {
-      console.log('ℹ No skills found to sync for Codex')
-      return
-    }
-
-    // Import converter dynamically
-    const converterPath = join(dirname(import.meta.dirname!), 'lib', 'converter.ts')
-    const { batchConvertSkills } = await import(converterPath)
-
     try {
-      // Read CLAUDE.md if it exists
-      let claudeMdContent = ''
-      if (await exists(claudeMdPath)) {
-        claudeMdContent = await Deno.readTextFile(claudeMdPath)
-      }
+      // Read CLAUDE.md (optional)
+      const claudeMdContent = await exists(claudeMdPath)
+        ? await Deno.readTextFile(claudeMdPath)
+        : ''
 
-      // Convert all skills
-      const results = await batchConvertSkills(skillsDir, 'agent-md')
+      // Convert all skills with codex-specific paths
+      const results = await batchConvertSkills(
+        skillsDir,
+        'agent-md',
+        (skillDirName) => `~/.codex/skills/${skillDirName}/SKILL.md`,
+      )
 
-      if (results.length === 0) {
-        console.log('  ℹ No skills found to convert')
-        return
-      }
+      // Build skills list
+      // deno-lint-ignore no-explicit-any
+      const skillsList = results.map((r: { output: any }) => r.output).join('\n')
 
-      // Build managed content: CLAUDE.md + skills
-      const managedContent = [
-        '# StashAway Agent Instructions\n',
-        'This section is managed by agent-recipes. Add your custom content above this line.\n',
-        '---\n',
-        claudeMdContent,
-        '\n---\n',
-        '# Available Skills\n',
-        // deno-lint-ignore no-explicit-any
-        results.map((r: { output: any }) => r.output).join('\n\n---\n\n'),
-      ].join('\n')
+      // Build skills section with auto-generated list
+      const skillsSection = this.buildSkillsSection(skillsList)
+
+      // Build managed content
+      const managedContent = `# StashAway Agent Instructions
+
+This section is managed by agent-recipes. Add your custom content above this line.
+
+---
+
+# Global Instructions
+
+${claudeMdContent}
+
+---
+
+${skillsSection}
+`
 
       // Sync with managed section
       const targetFile = join(targetPath, 'AGENTS.md')
       await this.syncManagedFile(targetFile, managedContent, 'Codex AGENTS.md')
+
+      // Copy skills to .codex/skills directory
+      const targetSkillsDir = join(targetPath, 'skills')
+      await this.syncSkills(skillsDir, targetSkillsDir)
 
       console.log(`  ✓ Synced AGENTS.md with global instructions + ${results.length} skill(s)`)
     } catch (error) {
@@ -258,20 +376,18 @@ export class Installer {
     ourManagedContent: string,
     description: string,
   ): Promise<void> {
-    const MARKER_START = '<!-- AGENT-RECIPES-MANAGED-START -->'
-    const MARKER_END = '<!-- AGENT-RECIPES-MANAGED-END -->'
+    const MARKER_START = '<stashaway-recipes-managed-section>'
+    const MARKER_END = '</stashaway-recipes-managed-section>'
 
     if (!await exists(targetPath)) {
       // First time - create file with managed section at end
       const initialContent = [
-        '# My Custom Instructions\n',
-        'Add your custom instructions here.\n',
-        'Everything above the managed section marker will be preserved.\n\n',
-        '---\n\n',
         MARKER_START,
-        '<!-- This section is managed by agent-recipes. Edit content above this line. -->\n',
-        ourManagedContent,
-        '\n' + MARKER_END,
+        '\n',
+        ourManagedContent.trimEnd(),
+        '\n',
+        MARKER_END,
+        '\n',
       ].join('')
 
       await Deno.writeTextFile(targetPath, initialContent)
@@ -282,11 +398,12 @@ export class Installer {
     // File exists - split and replace managed section
     const content = await Deno.readTextFile(targetPath)
     const markerIndex = content.indexOf(MARKER_START)
+    const markerEndIndex = content.indexOf(MARKER_END)
 
     let userContent: string
     let hadManagedSection: boolean
 
-    if (markerIndex === -1) {
+    if (markerIndex === -1 || markerEndIndex === -1 || markerEndIndex < markerIndex) {
       // No managed section yet - keep all content as user content
       userContent = content.trim()
       hadManagedSection = false
@@ -296,42 +413,43 @@ export class Installer {
       hadManagedSection = true
     }
 
-    // Reconstruct: user content + our managed section
-    const newContent = [
-      userContent,
-      '\n\n---\n\n',
+    const managedBlock = [
       MARKER_START,
-      '<!-- This section is managed by agent-recipes. Edit content above this line. -->\n',
-      ourManagedContent,
-      '\n' + MARKER_END,
+      '\n',
+      ourManagedContent.trimEnd(),
+      '\n',
+      MARKER_END,
     ].join('')
+
+    // Reconstruct: user content + our managed section
+    const newContent = userContent.length > 0 ? `${userContent.trimEnd()}\n\n${managedBlock}\n` : `${managedBlock}\n`
 
     await Deno.writeTextFile(targetPath, newContent)
     console.log(
-      hadManagedSection
-        ? `  ✓ Updated managed section in ${description}`
-        : `  ✓ Added managed section to ${description}`,
+      hadManagedSection ? `  ✓ Updated managed section in ${description}` : `  ✓ Added managed section to ${description}`,
     )
   }
 
   /**
-   * Sync skills with sa_ prefix (always replace our managed skills)
+   * Sync skills ensuring managed copies use sa_ prefix (always replace our managed skills)
    */
   private async syncSkills(sourceDir: string, targetDir: string): Promise<void> {
     await Deno.mkdir(targetDir, { recursive: true })
 
     // Get list of skills from repo
-    const repoSkills: string[] = []
+    const repoSkills: Array<{ dirName: string; targetName: string }> = []
     for await (const entry of Deno.readDir(sourceDir)) {
       if (entry.isDirectory) {
-        repoSkills.push(entry.name)
+        const dirName = entry.name
+        const targetName = dirName.startsWith('sa_') ? dirName : `sa_${dirName}`
+        repoSkills.push({ dirName, targetName })
       }
     }
 
-    // Sync each repo skill with sa_ prefix
-    for (const skillName of repoSkills) {
-      const sourcePath = join(sourceDir, skillName)
-      const targetPath = join(targetDir, `sa_${skillName}`)
+    // Sync each repo skill directory (managed copies keep sa_ prefix)
+    for (const { dirName, targetName } of repoSkills) {
+      const sourcePath = join(sourceDir, dirName)
+      const targetPath = join(targetDir, targetName)
 
       // Always replace - no questions asked
       if (await exists(targetPath)) {
@@ -339,7 +457,7 @@ export class Installer {
       }
 
       await this.copyDirectory(sourcePath, targetPath)
-      console.log(`  ✓ Synced skill: sa_${skillName}`)
+      console.log(`  ✓ Synced skill: ${targetName}`)
     }
 
     // Count user's custom skills (no sa_ prefix)
@@ -371,20 +489,19 @@ export class Installer {
   }
 
   async checkForUpdates(): Promise<
-    { hasUpdate: boolean; latestVersion: string; currentVersion: string } | null
+    { hasUpdate: boolean; latestVersion: string; currentVersion: string; changelogDiff?: string } | null
   > {
     try {
-      // Check if install directory exists and is a git repository
-      const gitDir = join(this.installDir, '.git')
-      if (!await exists(gitDir)) {
-        console.log('  ℹ Not a git repository, skipping update check')
+      const repoPath = await this.resolveGitRepository()
+      if (!repoPath) {
+        console.log('  ℹ Repository not managed by git, skipping update check')
         return null
       }
 
       // Fetch latest from origin (quietly)
       const fetchCmd = new Deno.Command('git', {
         args: ['fetch', 'origin', '--quiet'],
-        cwd: this.installDir,
+        cwd: repoPath,
         stdout: 'null',
         stderr: 'null',
       })
@@ -396,12 +513,12 @@ export class Installer {
       }
 
       // Determine remote branch (try main first, fall back to master)
-      const remoteBranch = await this.getDefaultRemoteBranch()
+      const remoteBranch = await this.getDefaultRemoteBranch(repoPath)
 
       // Get current commit hash
       const currentHashCmd = new Deno.Command('git', {
         args: ['rev-parse', 'HEAD'],
-        cwd: this.installDir,
+        cwd: repoPath,
         stdout: 'piped',
       })
       const currentHashResult = await currentHashCmd.output()
@@ -413,7 +530,7 @@ export class Installer {
       // Get remote commit hash
       const remoteHashCmd = new Deno.Command('git', {
         args: ['rev-parse', `origin/${remoteBranch}`],
-        cwd: this.installDir,
+        cwd: repoPath,
         stdout: 'piped',
         stderr: 'null',
       })
@@ -427,7 +544,7 @@ export class Installer {
       // Check if remote is ahead
       const revListCmd = new Deno.Command('git', {
         args: ['rev-list', '--count', `HEAD..origin/${remoteBranch}`],
-        cwd: this.installDir,
+        cwd: repoPath,
         stdout: 'piped',
         stderr: 'null',
       })
@@ -436,11 +553,17 @@ export class Installer {
       if (revListResult.success) {
         const commitsAhead = parseInt(new TextDecoder().decode(revListResult.stdout).trim())
         const hasUpdate = commitsAhead > 0
+        let changelogDiff: string | undefined
+
+        if (hasUpdate) {
+          changelogDiff = await this.getChangelogDiff(repoPath, remoteBranch)
+        }
 
         return {
           hasUpdate,
           latestVersion: remoteHash,
           currentVersion: currentHash,
+          changelogDiff,
         }
       }
 
@@ -452,15 +575,52 @@ export class Installer {
     }
   }
 
+  private async getChangelogDiff(
+    repoPath: string,
+    remoteBranch: string,
+  ): Promise<string | undefined> {
+    try {
+      const diffCmd = new Deno.Command('git', {
+        args: [
+          'diff',
+          '--color=never',
+          '--unified=5',
+          `HEAD..origin/${remoteBranch}`,
+          '--',
+          'CHANGELOG.md',
+        ],
+        cwd: repoPath,
+        stdout: 'piped',
+        stderr: 'null',
+      })
+
+      const result = await diffCmd.output()
+      if (!result.success) return undefined
+
+      const diffText = new TextDecoder().decode(result.stdout).trim()
+      if (diffText.length === 0) return undefined
+
+      return diffText
+    } catch {
+      return undefined
+    }
+  }
+
   async pullLatestChanges(): Promise<boolean> {
     try {
+      const repoPath = await this.resolveGitRepository()
+      if (!repoPath) {
+        console.log('  ℹ Repository not managed by git, cannot pull updates automatically')
+        return false
+      }
+
       // Get the default remote branch
-      const remoteBranch = await this.getDefaultRemoteBranch()
+      const remoteBranch = await this.getDefaultRemoteBranch(repoPath)
 
       // Reset to remote branch (hard reset to avoid merge conflicts)
       const resetCmd = new Deno.Command('git', {
         args: ['reset', '--hard', `origin/${remoteBranch}`],
-        cwd: this.installDir,
+        cwd: repoPath,
         stdout: 'piped',
         stderr: 'piped',
       })
@@ -476,7 +636,7 @@ export class Installer {
       // Clean any untracked files
       const cleanCmd = new Deno.Command('git', {
         args: ['clean', '-fd'],
-        cwd: this.installDir,
+        cwd: repoPath,
         stdout: 'null',
         stderr: 'null',
       })
@@ -491,12 +651,12 @@ export class Installer {
     }
   }
 
-  private async getDefaultRemoteBranch(): Promise<string> {
+  private async getDefaultRemoteBranch(repoPath: string): Promise<string> {
     try {
       // Try to get default remote branch
       const cmd = new Deno.Command('git', {
         args: ['symbolic-ref', 'refs/remotes/origin/HEAD'],
-        cwd: this.installDir,
+        cwd: repoPath,
         stdout: 'piped',
         stderr: 'null',
       })
@@ -516,7 +676,7 @@ export class Installer {
     for (const branch of branches) {
       const cmd = new Deno.Command('git', {
         args: ['rev-parse', '--verify', `origin/${branch}`],
-        cwd: this.installDir,
+        cwd: repoPath,
         stdout: 'null',
         stderr: 'null',
       })
