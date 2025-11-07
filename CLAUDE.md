@@ -11,26 +11,25 @@ StashAway engineering teams.
 
 ```
 stashaway-agent-recipes/
-├── cli/                       # CLI application (Deno + Cliffy)
-│   ├── main.ts               # Entry point
-│   ├── commands/             # Command implementations
+├── main.ts                  # CLI entry point
+├── cli/                     # CLI modules (commands + shared libs)
+│   ├── commands/            # Command implementations
 │   │   ├── sync.ts          # Install/update/sync command
 │   │   ├── list.ts          # List skills
 │   │   ├── convert.ts       # Format conversion
 │   │   └── info.ts          # Show info
-│   └── lib/                  # Shared utilities
-│       ├── installer.ts      # Installation logic
-│       └── converter.ts      # Format conversions
-├── skills/                   # Skill definitions
-│   ├── rightsize/           # RightSize checker skill
-│   └── commit-message/      # Commit message formatter
-├── instructions/             # Platform-specific instructions
+│   └── lib/                 # Shared utilities
+│       ├── installer.ts     # Installation logic
+│       └── converter.ts     # Format conversions
+├── skills/                  # Skill definitions (managed with sa_ prefix)
+│   ├── sa_rightsize/        # RightSize checker skill
+│   └── sa_commit-message/   # Commit message formatter
+├── instructions/            # Platform-specific instructions
 │   └── claude-code/         # Claude Code global instructions
 │       └── CLAUDE.md        # Global instructions template
 ├── install.sh               # Installation script
 ├── CLAUDE.md                # This file
 ├── AGENTS.md                # Agent definitions
-├── PLAN_claude.md           # Implementation plan
 └── README.md                # User documentation
 ```
 
@@ -52,9 +51,6 @@ For detailed development instructions, including adding skills, modifying the CL
 # Install Deno if not already installed
 curl -fsSL https://deno.land/install.sh | sh
 
-# Navigate to CLI directory
-cd cli
-
 # Run CLI in development mode
 deno task dev --help
 
@@ -64,9 +60,9 @@ deno task build
 
 ### Adding a New Skill
 
-1. **Create skill directory**:
+1. **Create skill directory** (managed skills use `sa_` prefix, but keep the `name` in frontmatter without it):
    ```bash
-   mkdir skills/my-skill
+   mkdir skills/sa_my-skill
    ```
 
 2. **Create SKILL.md with frontmatter**:
@@ -99,7 +95,7 @@ deno task build
 4. **Verify format conversion** (Codex AGENTS.md is auto-generated during sync):
    ```bash
    # Preview how skill will appear in AGENTS.md
-   agent-recipes convert skills/my-skill/SKILL.md --format agent-md
+   agent-recipes convert skills/sa_my-skill/SKILL.md --format agent-md
    ```
 
 ### Adding a New CLI Command
@@ -126,7 +122,6 @@ deno task build
 
 3. **Test the command**:
    ```bash
-   cd cli
    deno run --allow-all main.ts my-command
    ```
 
@@ -156,6 +151,13 @@ When modifying:
 4. Test with both main and master branches
 5. Verify PATH modification works
 
+## Recording Changes
+
+- Update `CHANGELOG.md` whenever repository-managed skills or global instructions are added or modified. Summaries should highlight user-facing impact (for example, new skills, major rewrites, notable fixes).
+- Keep the `Unreleased` section current during development. Move entries into a versioned section (for example, `## 0.2.0`) during release prep.
+- Include any manual follow-up that users must perform (like rerunning `agent-recipes sync`) inside the changelog entry so upgrade notes remain actionable.
+- Before bumping versions, ensure the changelog captures instruction changes, skill updates, and CLI behaviour adjustments.
+
 ## Code Style
 
 - Use Deno/TypeScript best practices
@@ -168,8 +170,6 @@ When modifying:
 ## Testing
 
 ```bash
-cd cli
-
 # Run tests
 deno test
 
@@ -221,22 +221,26 @@ description: Brief one-line description
 
 ## Release Process
 
-1. **Update version**:
-   - Update version in `deno.json`
+1. **Finalize changelog**:
+   - Move entries from `## Unreleased` to a new version section in `CHANGELOG.md`
+   - Summarize notable instruction updates, new/updated skills, and CLI changes
+
+2. **Update version numbers**:
+   - Update version in `deno.json` (manual edit; no automated helper yet)
    - Update VERSION constant in `main.ts`
 
-2. **Test thoroughly**:
+3. **Test thoroughly**:
    - Test installation from scratch
    - Test update scenario
    - Test all commands
    - Test with each AI tool
 
-3. **Create release**:
+4. **Create release**:
    - Tag with version: `git tag v0.1.0`
    - Push tag: `git push origin v0.1.0`
    - Create release in GitLab
 
-4. **Update documentation**:
+5. **Update documentation**:
    - Update README.md if needed
    - Update PLAN_claude.md if architecture changed
 
@@ -264,7 +268,6 @@ import { Command } from 'https://deno.land/x/cliffy' // ❌ Old style
 ### Build Errors
 
 ```bash
-cd cli
 rm -rf dist/
 deno task build
 ```

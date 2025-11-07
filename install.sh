@@ -15,6 +15,19 @@ Options:
   exit 0
 }
 
+ensure_command() {
+  command_name="$1"
+  shift
+  if ! command -v "$command_name" >/dev/null 2>&1; then
+    echo "❌ ${command_name} is not installed"
+    if [ "$#" -gt 0 ]; then
+      echo ""
+      printf "%s\n" "$@"
+    fi
+    exit 1
+  fi
+}
+
 # Parse arguments
 modify_path=true
 for arg in "$@"; do
@@ -31,18 +44,32 @@ for arg in "$@"; do
   esac
 done
 
-# Check for Deno
-command -v deno >/dev/null 2>&1 || {
+# Check for required tools
+ensure_command git \
+  "" \
+  "Please install Git first:" \
+  "  macOS (Homebrew): brew install git" \
+  "  Linux (Debian/Ubuntu): sudo apt-get install git" \
+  "" \
+  "For more options see: https://git-scm.com/downloads"
+
+if ! command -v deno >/dev/null 2>&1; then
   echo "❌ Deno is not installed"
   echo ""
-  echo "Please install Deno first:"
-  echo "  curl -fsSL https://deno.land/install.sh | sh"
+  echo "Suggested install steps:"
+  echo "  - Using asdf (recommended if available):"
+  echo "      asdf plugin add deno >/dev/null 2>&1 || true"
+  echo "      asdf install
   echo ""
-  echo "Or visit: https://deno.land/#installation"
+  echo "  - Official installer:"
+  echo "      curl -fsSL https://deno.land/install.sh | sh"
+  echo ""
+  echo "Once Deno is installed, rerun this script."
   exit 1
-}
+fi
 
 echo "✓ Deno found: $(deno --version | head -n 1)"
+echo "✓ Git found: $(git --version | head -n 1)"
 
 # Set installation directory
 agent_recipes_home="${AGENT_RECIPES_HOME:-$HOME/.stashaway-agent-recipes}"

@@ -65,6 +65,12 @@ export const syncCommand = new Command()
             `📥 Updating from ${updateInfo.currentVersion} to ${updateInfo.latestVersion}...\n`,
           )
 
+          if (updateInfo.changelogDiff) {
+            console.log('📄 Changelog diff since your current version:\n')
+            console.log(updateInfo.changelogDiff)
+            console.log()
+          }
+
           // Pull latest changes
           const pullSuccess = await installer.pullLatestChanges()
           if (!pullSuccess) {
@@ -101,6 +107,10 @@ export const syncCommand = new Command()
           console.log(`📦 New version available!`)
           console.log(`   Current: ${updateInfo.currentVersion}`)
           console.log(`   Latest:  ${updateInfo.latestVersion}`)
+          if (updateInfo.changelogDiff) {
+            console.log('\n📄 Changelog diff since your version:\n')
+            console.log(updateInfo.changelogDiff)
+          }
           console.log(`\n   Run \`agent-recipes sync --force\` to update\n`)
         } else if (updateInfo) {
           console.log(`✓ Up to date (${updateInfo.currentVersion})\n`)

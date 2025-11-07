@@ -28,9 +28,6 @@ contribute to the project.
 git clone git@gitlab.stashaway.com:vladimir.semashko/stashaway-agent-recipes.git
 cd stashaway-agent-recipes
 
-# Navigate to CLI directory
-cd cli
-
 # Run in development mode
 deno task dev --help
 
@@ -42,26 +39,25 @@ deno task build
 
 ```
 stashaway-agent-recipes/
-├── cli/                       # CLI application (Deno + Cliffy)
-│   ├── main.ts               # Entry point
-│   ├── commands/             # Command implementations
+├── main.ts                  # CLI entry point
+├── cli/                     # CLI modules (commands + shared libs)
+│   ├── commands/            # Command implementations
 │   │   ├── sync.ts          # Install/update/sync command
 │   │   ├── list.ts          # List skills
 │   │   ├── convert.ts       # Format conversion
 │   │   └── info.ts          # Show info
-│   └── lib/                  # Shared utilities
-│       ├── installer.ts      # Installation logic
-│       └── converter.ts      # Format conversions
-├── skills/                   # Skill definitions
-│   ├── rightsize/           # RightSize checker skill
-│   └── commit-message/      # Commit message formatter
+│   └── lib/                 # Shared utilities
+│       ├── installer.ts     # Installation logic
+│       └── converter.ts     # Format conversions
+├── skills/                  # Skill definitions (managed with sa_ prefix)
+│   ├── sa_rightsize/        # RightSize checker skill
+│   └── sa_commit-message/   # Commit message formatter
 ├── instructions/             # Platform-specific instructions
 │   └── claude-code/         # Claude Code global instructions
 │       └── CLAUDE.md        # Global instructions template
 ├── install.sh               # Installation script
 ├── CLAUDE.md                # Instructions for working ON this repo
 ├── AGENTS.md                # Agent definitions for this repo
-├── PLAN_claude.md           # Implementation plan
 ├── CONTRIBUTING.md          # This file
 └── README.md                # User documentation
 ```
@@ -73,12 +69,12 @@ Skills provide specialized guidance to AI agents for common StashAway workflows.
 ### 1. Create Skill Directory
 
 ```bash
-mkdir skills/my-skill
+mkdir skills/sa_my-skill
 ```
 
 ### 2. Create SKILL.md
 
-Create `skills/my-skill/SKILL.md` with frontmatter and content:
+Create `skills/sa_my-skill/SKILL.md` with frontmatter and content (keep the `name` value without the `sa_` prefix):
 
 ```markdown
 ---
@@ -143,11 +139,10 @@ agent-recipes sync
 
 ```bash
 # Convert to AGENTS.md format (for Codex)
-cd cli
-deno run --allow-read main.ts convert ../skills/my-skill/SKILL.md --format agent-md
+deno run --allow-read main.ts convert skills/sa_my-skill/SKILL.md --format agent-md
 
 # Or batch convert all skills
-deno run --allow-read main.ts convert ../skills --batch --format agent-md
+deno run --allow-read main.ts convert skills --batch --format agent-md
 ```
 
 ### Skill Best Practices
@@ -191,7 +186,6 @@ const main = new Command()
 3. **Test the command**:
 
 ```bash
-cd cli
 deno run --allow-all main.ts my-command
 ```
 
@@ -216,8 +210,6 @@ The installation logic is in `cli/lib/installer.ts`. Key methods:
 ### Manual Testing
 
 ```bash
-cd cli
-
 # Test specific command
 deno run --allow-all main.ts sync
 deno run --allow-all main.ts list
@@ -247,8 +239,6 @@ ls ~/.codex/
 ### Running Tests
 
 ```bash
-cd cli
-
 # Run tests
 deno test
 
@@ -267,7 +257,6 @@ We follow Deno and TypeScript best practices:
 
 ```bash
 # Format code
-cd cli
 deno fmt
 
 # Check formatting
@@ -399,7 +388,6 @@ import { Command } from 'https://deno.land/x/cliffy' // ❌ Old style
 ### Build Errors
 
 ```bash
-cd cli
 rm -rf dist/
 deno task build
 ```
@@ -408,7 +396,7 @@ deno task build
 
 - **Issues**: [GitLab Issues](https://gitlab.stashaway.com/vladimir.semashko/stashaway-agent-recipes/-/issues)
 - **Slack**: #agent-recipes (to be created)
-- **Documentation**: README.md and PLAN_claude.md
+- **Documentation**: README.md and CLAUDE.md
 
 ## Resources
 

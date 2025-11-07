@@ -255,7 +255,7 @@ export class Installer {
     // Always sync (creates file if missing, updates if exists)
     await this.syncManagedFile(claudeMdTarget, ourContent, 'Claude Code CLAUDE.md')
 
-    // Sync skills with sa_ prefix
+    // Sync skills (managed copies keep sa_ prefix)
     const skillsSource = join(repoRoot, 'skills')
     const skillsTarget = join(targetPath, 'skills')
 
@@ -328,20 +328,18 @@ export class Installer {
     ourManagedContent: string,
     description: string,
   ): Promise<void> {
-    const MARKER_START = '<!-- AGENT-RECIPES-MANAGED-START -->'
-    const MARKER_END = '<!-- AGENT-RECIPES-MANAGED-END -->'
+    const MARKER_START = '<stashaway-recipes-managed-section>'
+    const MARKER_END = '</stashaway-recipes-managed-section>'
 
     if (!await exists(targetPath)) {
       // First time - create file with managed section at end
       const initialContent = [
-        '# My Custom Instructions\n',
-        'Add your custom instructions here.\n',
-        'Everything above the managed section marker will be preserved.\n\n',
-        '---\n\n',
         MARKER_START,
-        '<!-- This section is managed by agent-recipes. Edit content above this line. -->\n',
-        ourManagedContent,
-        '\n' + MARKER_END,
+        '\n',
+        ourManagedContent.trimEnd(),
+        '\n',
+        MARKER_END,
+        '\n',
       ].join('')
 
       await Deno.writeTextFile(targetPath, initialContent)
@@ -352,11 +350,12 @@ export class Installer {
     // File exists - split and replace managed section
     const content = await Deno.readTextFile(targetPath)
     const markerIndex = content.indexOf(MARKER_START)
+    const markerEndIndex = content.indexOf(MARKER_END)
 
     let userContent: string
     let hadManagedSection: boolean
 
-    if (markerIndex === -1) {
+    if (markerIndex === -1 || markerEndIndex === -1 || markerEndIndex < markerIndex) {
       // No managed section yet - keep all content as user content
       userContent = content.trim()
       hadManagedSection = false
@@ -366,15 +365,16 @@ export class Installer {
       hadManagedSection = true
     }
 
-    // Reconstruct: user content + our managed section
-    const newContent = [
-      userContent,
-      '\n\n---\n\n',
+    const managedBlock = [
       MARKER_START,
-      '<!-- This section is managed by agent-recipes. Edit content above this line. -->\n',
-      ourManagedContent,
-      '\n' + MARKER_END,
+      '\n',
+      ourManagedContent.trimEnd(),
+      '\n',
+      MARKER_END,
     ].join('')
+
+    // Reconstruct: user content + our managed section
+    const newContent = userContent.length > 0 ? `${userContent.trimEnd()}\n\n${managedBlock}\n` : `${managedBlock}\n`
 
     await Deno.writeTextFile(targetPath, newContent)
     console.log(
@@ -383,23 +383,25 @@ export class Installer {
   }
 
   /**
-   * Sync skills with sa_ prefix (always replace our managed skills)
+   * Sync skills ensuring managed copies use sa_ prefix (always replace our managed skills)
    */
   private async syncSkills(sourceDir: string, targetDir: string): Promise<void> {
     await Deno.mkdir(targetDir, { recursive: true })
 
     // Get list of skills from repo
-    const repoSkills: string[] = []
+    const repoSkills: Array<{ dirName: string; targetName: string }> = []
     for await (const entry of Deno.readDir(sourceDir)) {
       if (entry.isDirectory) {
-        repoSkills.push(entry.name)
+        const dirName = entry.name
+        const targetName = dirName.startsWith('sa_') ? dirName : `sa_${dirName}`
+        repoSkills.push({ dirName, targetName })
       }
     }
 
-    // Sync each repo skill with sa_ prefix
-    for (const skillName of repoSkills) {
-      const sourcePath = join(sourceDir, skillName)
-      const targetPath = join(targetDir, `sa_${skillName}`)
+    // Sync each repo skill directory (managed copies keep sa_ prefix)
+    for (const { dirName, targetName } of repoSkills) {
+      const sourcePath = join(sourceDir, dirName)
+      const targetPath = join(targetDir, targetName)
 
       // Always replace - no questions asked
       if (await exists(targetPath)) {
@@ -407,7 +409,7 @@ export class Installer {
       }
 
       await this.copyDirectory(sourcePath, targetPath)
-      console.log(`  ✓ Synced skill: sa_${skillName}`)
+      console.log(`  ✓ Synced skill: ${targetName}`)
     }
 
     // Count user's custom skills (no sa_ prefix)
@@ -439,7 +441,7 @@ export class Installer {
   }
 
   async checkForUpdates(): Promise<
-    { hasUpdate: boolean; latestVersion: string; currentVersion: string } | null
+    { hasUpdate: boolean; latestVersion: string; currentVersion: string; changelogDiff?: string } | null
   > {
     try {
       const repoPath = await this.resolveGitRepository()
@@ -503,11 +505,17 @@ export class Installer {
       if (revListResult.success) {
         const commitsAhead = parseInt(new TextDecoder().decode(revListResult.stdout).trim())
         const hasUpdate = commitsAhead > 0
+        let changelogDiff: string | undefined
+
+        if (hasUpdate) {
+          changelogDiff = await this.getChangelogDiff(repoPath, remoteBranch)
+        }
 
         return {
           hasUpdate,
           latestVersion: remoteHash,
           currentVersion: currentHash,
+          changelogDiff,
         }
       }
 
@@ -516,6 +524,37 @@ export class Installer {
       // deno-lint-ignore no-explicit-any
       console.log('  ⚠ Update check failed:', (error as any)?.message)
       return null
+    }
+  }
+
+  private async getChangelogDiff(
+    repoPath: string,
+    remoteBranch: string,
+  ): Promise<string | undefined> {
+    try {
+      const diffCmd = new Deno.Command('git', {
+        args: [
+          'diff',
+          '--color=never',
+          '--unified=5',
+          `HEAD..origin/${remoteBranch}`,
+          '--',
+          'CHANGELOG.md',
+        ],
+        cwd: repoPath,
+        stdout: 'piped',
+        stderr: 'null',
+      })
+
+      const result = await diffCmd.output()
+      if (!result.success) return undefined
+
+      const diffText = new TextDecoder().decode(result.stdout).trim()
+      if (diffText.length === 0) return undefined
+
+      return diffText
+    } catch {
+      return undefined
     }
   }
 
