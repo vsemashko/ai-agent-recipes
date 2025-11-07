@@ -59,7 +59,8 @@ if ! command -v deno >/dev/null 2>&1; then
   echo "Suggested install steps:"
   echo "  - Using asdf (recommended if available):"
   echo "      asdf plugin add deno >/dev/null 2>&1 || true"
-  echo "      asdf install
+  echo "      echo \"deno latest\" >> ~/.tool-versions"
+  echo "      asdf install"
   echo ""
   echo "  - Official installer:"
   echo "      curl -fsSL https://deno.land/install.sh | sh"
