@@ -32,28 +32,46 @@ export class Installer {
     this.binPath = join(this.installDir, 'bin')
   }
 
-  private buildAgentsMdContent(claudeMdContent: string, agentsMdContent: string, skillsList: string): string {
-    return `# StashAway Agent Instructions
+  private buildSkillsSection(skillsList: string): string {
+    return `## Available Skills
 
-This section is managed by agent-recipes. Add your custom content above this line.
+You have access to the following specialized skills. **Before starting any task, review this list to identify relevant skills.**
 
----
+### Skill Directory
 
-# Global Instructions
-
-${claudeMdContent}
-
----
-
-${agentsMdContent}
-
----
-
-# Available Skills
-
-The following skills are available. For full instructions, read the skill's SKILL.md file from \`~/.codex/skills/sa_<skill-name>/SKILL.md\`.
-
+<!-- AUTO-GENERATED SKILLS LIST START -->
 ${skillsList}
+<!-- AUTO-GENERATED SKILLS LIST END -->
+
+### Skill Usage Protocol
+
+**CRITICAL: Follow this workflow for EVERY task:**
+
+1. **Pre-Task Check**: Before starting any task, scan the available skills list above
+2. **Match Detection**: Identify if any skill is relevant to the current task based on its description
+3. **Skill Activation**: If a match is found:
+   - Read the full SKILL.md file at the specified path
+   - Follow ALL instructions and best practices defined in that skill
+   - Use any helper scripts or tools mentioned in the skill
+4. **Multiple Skills**: If multiple skills apply, read and integrate guidance from all relevant skills
+5. **No Match**: If no skill matches, proceed with standard approach
+
+### Examples
+
+**Task: "Create a PDF report with charts"**
+→ Match: \`pdf\` skill
+→ Action: Read the pdf SKILL.md and follow its instructions
+
+**Task: "Check if deployment is rightsized"**
+→ Match: \`rightsize\` skill
+→ Action: Read the rightsize SKILL.md and follow its instructions
+
+### Important Notes
+
+- Skills contain expert knowledge and best practices - always defer to skill instructions when available
+- Skills may include helper scripts, templates, or specific tool recommendations - use them
+- Read the SKILL.md completely before starting work - it may contain critical requirements
+- Some skills have dependencies or prerequisites listed in their documentation
 `
   }
 
@@ -294,9 +312,8 @@ ${skillsList}
     const targetPath = join(this.homeDir, '.codex')
     await Deno.mkdir(targetPath, { recursive: true })
 
-    // Auto-generate AGENTS.md from CLAUDE.md + AGENTS.md + skills
+    // Auto-generate AGENTS.md from CLAUDE.md + skills
     const claudeMdPath = join(repoRoot, 'instructions', 'claude-code', 'CLAUDE.md')
-    const agentsMdPath = join(repoRoot, 'instructions', 'AGENTS.md')
     const skillsDir = join(repoRoot, 'skills')
 
     try {
@@ -305,22 +322,35 @@ ${skillsList}
         ? await Deno.readTextFile(claudeMdPath)
         : ''
 
-      // Read AGENTS.md (required)
-      const agentsMdContent = await Deno.readTextFile(agentsMdPath)
+      // Convert all skills with codex-specific paths
+      const results = await batchConvertSkills(
+        skillsDir,
+        'agent-md',
+        (skillDirName) => `~/.codex/skills/${skillDirName}/SKILL.md`,
+      )
 
-      // Convert all skills
-      const results = await batchConvertSkills(skillsDir, 'agent-md')
-
-      if (results.length === 0) {
-        console.log('  ℹ No skills found to convert')
-        return
-      }
-
+      // Build skills list
       // deno-lint-ignore no-explicit-any
       const skillsList = results.map((r: { output: any }) => r.output).join('\n')
 
+      // Build skills section with auto-generated list
+      const skillsSection = this.buildSkillsSection(skillsList)
+
       // Build managed content
-      const managedContent = this.buildAgentsMdContent(claudeMdContent, agentsMdContent, skillsList)
+      const managedContent = `# StashAway Agent Instructions
+
+This section is managed by agent-recipes. Add your custom content above this line.
+
+---
+
+# Global Instructions
+
+${claudeMdContent}
+
+---
+
+${skillsSection}
+`
 
       // Sync with managed section
       const targetFile = join(targetPath, 'AGENTS.md')
