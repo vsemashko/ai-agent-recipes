@@ -7,11 +7,13 @@ headings (for example, Added/Changed/Fixed).
 
 ### Added
 
+- New `sa_branch-name` skill for generating and validating git branch names following StashAway conventions
 - Codex and OpenCode `AGENT.template.md` samples now demonstrate exactly how to embed the shared instructions (`{{AGENTS.md}}`) plus the reusable
   skills boilerplate (`{{SKILLS_INSTRUCTIONS.template.md}}`), making it easier to add future tools.
 
 ### Changed
 
+- Updated `sa_commit-message` skill to explicitly prohibit AI attribution footers in commit messages (no "Generated with Claude Code" or "Co-Authored-By: Claude" footers)
 - Renamed `instructions/GLOBAL_INSTRUCTIONS.md` to `instructions/AGENTS.md` and updated every template, doc, and installer path to treat it as the
   single managed source.
 - Simplified the template stack: removed `instructions/common/AGENTS.template.md` and the unused Claude `AGENT.template.md`, so per-tool templates now

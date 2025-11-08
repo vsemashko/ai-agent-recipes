@@ -84,6 +84,7 @@ fix: Correct typo in error message
 - Required only if context isn't clear from subject/ticket/code
 - Can use any format (paragraphs, bullets, etc.)
 - Proper English spelling and grammar
+- **Do NOT include AI attribution footers** (no "Generated with Claude Code", "Co-Authored-By: Claude", etc.)
 
 ## Examples
 
@@ -176,8 +177,12 @@ Proceed with this commit? (yes/no)
 
 ## Anti-patterns to Avoid
 
-❌ `feat: Added new feature` (not imperative) ❌ `fix: Fix bug.` (period at end) ❌ `Update code` (missing type and ticket) ❌
-`feat: Did some changes` (vague subject) ✅ `feat: SA-123 Add user authentication` (correct)
+❌ `feat: Added new feature` (not imperative)
+❌ `fix: Fix bug.` (period at end)
+❌ `Update code` (missing type and ticket)
+❌ `feat: Did some changes` (vague subject)
+❌ Adding AI attribution footers like "🤖 Generated with [Claude Code]" or "Co-Authored-By: Claude"
+✅ `feat: SA-123 Add user authentication` (correct)
 
 ## Git Commit Workflow
 
