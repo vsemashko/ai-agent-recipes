@@ -8,6 +8,7 @@ description: Generate and validate git branch names following StashAway conventi
 ## When to Use
 
 Use this skill when:
+
 - Creating a new git branch
 - Validating an existing branch name
 - User asks for help with branch naming
@@ -166,18 +167,18 @@ When validating a branch name, check:
 
 ## Anti-patterns to Avoid
 
-❌ `feature-branch` (no ticket, no type)
-❌ `SA-604-add-feature` (missing type)
-❌ `feat/add_feature` (missing ticket, uses underscores)
-❌ `feat/SA604-add-feature` (missing hyphen in ticket)
-❌ `feat/sa-604-add-feature` (ticket should be uppercase)
-❌ `feat/SA-604-Add-Feature` (description should be lowercase)
-❌ `feat/SA-604 add feature` (contains spaces)
-❌ `feat/SA-604-add-a-brand-new-payment-gateway-integration-with-stripe` (too long, too verbose)
+- ❌ `feature-branch` (no ticket, no type)
+- ❌ `SA-604-add-feature` (missing type)
+- ❌ `feat/add_feature` (missing ticket, uses underscores)
+- ❌ `feat/SA604-add-feature` (missing hyphen in ticket)
+- ❌ `feat/sa-604-add-feature` (ticket should be uppercase)
+- ❌ `feat/SA-604-Add-Feature` (description should be lowercase)
+- ❌ `feat/SA-604 add feature` (contains spaces)
+- ❌ `feat/SA-604-add-a-brand-new-payment-gateway-integration-with-stripe` (too long, too verbose)
 
-✅ `feat/SA-604-add-payment-gateway` (correct)
-✅ `fix/SA-1234-resolve-login-timeout` (correct)
-✅ `chore/SA-789-upgrade-node-version` (correct)
+- ✅ `feat/SA-604-add-payment-gateway` (correct)
+- ✅ `fix/SA-1234-resolve-login-timeout` (correct)
+- ✅ `chore/SA-789-upgrade-node-version` (correct)
 
 ## Extracting Ticket from Branch Name
 
@@ -195,12 +196,14 @@ Examples:
 ```
 
 **Extraction Logic**:
+
 1. Split by `/` to get: `<type>` and `<ticket-description>`
 2. Take second part after `/`
 3. Split by `-` (first hyphen after ticket)
 4. First segment is the ticket number
 
 **Edge Cases**:
+
 - If branch is `main`, `master`, `develop`: No ticket
 - If branch doesn't follow convention: Ask user for ticket
 - If ticket has multiple hyphens (e.g., `PROJ-SUB-123`): Take everything before description
@@ -237,6 +240,7 @@ Reference other tickets in commit messages and PR description.
 ### No Ticket Available
 
 If truly no ticket exists (rare in team environment):
+
 - Consider creating a ticket first (preferred)
 - If absolutely necessary, discuss with team lead
 - Never use placeholder like "SA-000" or "no-ticket"
@@ -244,6 +248,7 @@ If truly no ticket exists (rare in team environment):
 ### Personal/Experimental Branches
 
 For personal experiments or spikes:
+
 ```
 spike/<your-name>-<experiment-name>
 experiment/<your-name>-<test-name>
@@ -253,21 +258,17 @@ These are typically not merged to main.
 
 ## Common Questions
 
-**Q: Can I use underscores instead of hyphens?**
-A: No, always use hyphens (kebab-case) for consistency.
+**Q: Can I use underscores instead of hyphens?** A: No, always use hyphens (kebab-case) for consistency.
 
-**Q: Should I include my name in the branch?**
-A: No, git already tracks who created the branch. Ticket number is sufficient.
+**Q: Should I include my name in the branch?** A: No, git already tracks who created the branch. Ticket number is sufficient.
 
-**Q: What if my description needs multiple words?**
-A: Use hyphens between words: `add-payment-gateway-integration`
+**Q: What if my description needs multiple words?** A: Use hyphens between words: `add-payment-gateway-integration`
 
-**Q: Can I abbreviate words?**
-A: Use clear abbreviations that are well-understood (e.g., `auth`, `db`, `api`)
-Avoid cryptic abbreviations (e.g., `usr`, `pymnt`)
+**Q: Can I abbreviate words?** A: Use clear abbreviations that are well-understood (e.g., `auth`, `db`, `api`) Avoid cryptic abbreviations (e.g.,
+`usr`, `pymnt`)
 
-**Q: What's the difference between `feat` and `chore`?**
-A:
+**Q: What's the difference between `feat` and `chore`?** A:
+
 - `feat`: Changes user-facing behavior or adds new functionality
 - `chore`: Maintenance work like dependency updates, cleanup, tooling
 

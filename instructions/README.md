@@ -8,11 +8,12 @@ instructions/
 ├── common/
 │   └── skills.eta        # Skills section template (renders skillsList)
 ├── claude/
-│   └── main.eta          # Generates ~/.claude/CLAUDE.md
+│   ├── CLAUDE.md.eta     # Generates ~/.claude/CLAUDE.md
+│   └── AGENTS.md.eta     # Generates ~/.claude/AGENTS.md
 ├── codex/
-│   └── main.eta          # Generates ~/.codex/AGENTS.md
+│   └── AGENTS.md.eta     # Generates ~/.codex/AGENTS.md
 └── opencode/
-    └── main.eta          # Generates ~/.opencode/AGENTS.md
+    └── AGENTS.md.eta     # Generates ~/.opencode/AGENTS.md
 ```
 
 ## Template System
@@ -37,10 +38,12 @@ Templates receive a data object with these properties:
 ## Template Layering
 
 1. **Global instructions** live in `GLOBAL_INSTRUCTIONS.md` - this is the shared baseline for all platforms
-2. **Platform templates** (`{platform}/main.eta`) compose the final output using Eta syntax
+2. **Platform templates** (`{platform}/*.eta`) compose the final outputs using Eta syntax
+   - Template filenames determine output filenames (e.g., `CLAUDE.md.eta` → `CLAUDE.md`)
+   - Multiple templates per platform are supported
 3. **Skills template** (`common/skills.eta`) provides the shared skills section boilerplate
 
-**Example** (`codex/main.eta`):
+**Example** (`codex/AGENTS.md.eta`):
 
 ```eta
 <%= it.agents %>
@@ -58,7 +61,6 @@ Add to `PLATFORM_CONFIGS` in `cli/lib/installer.ts`:
 'my-platform': {
   name: 'My Platform',
   dir: '.myplatform',              // Home directory
-  outputFile: 'AGENTS.md',         // Output filename
   skillsFormat: 'agent-md',        // Optional: convert & embed skills
   pathReplacements: {              // Optional: path adjustments
     '~/.claude': '~/.myplatform'
@@ -66,9 +68,9 @@ Add to `PLATFORM_CONFIGS` in `cli/lib/installer.ts`:
 }
 ```
 
-### 2. Create Template
+### 2. Create Templates
 
-Create `instructions/my-platform/main.eta`:
+Create `instructions/my-platform/AGENTS.md.eta` (or other .eta files as needed):
 
 ```eta
 <%= it.agents %>
@@ -89,11 +91,10 @@ agent-recipes sync
 
 - `name`: Display name shown to users
 - `dir`: Home directory (e.g., `.claude`, `.codex`)
-- `outputFile`: Output filename (e.g., `CLAUDE.md`, `AGENTS.md`)
 
 ### Optional Fields
 
-- `skillsFormat`: If set to `'agent-md'`, skills are converted and embedded in the main file
+- `skillsFormat`: If set to `'agent-md'`, skills are converted and embedded in templates
 - `pathReplacements`: Map of path replacements applied when copying skill files
 
 ## Workflow
@@ -106,7 +107,7 @@ agent-recipes sync
 ## Design Principles
 
 - **Single source of truth**: `GLOBAL_INSTRUCTIONS.md` contains shared guidance
-- **Convention over configuration**: Predictable file locations (`{platform}/main.eta`)
+- **Convention over configuration**: Template filenames determine output filenames (`{platform}/*.eta`)
 - **Declarative platforms**: Config-driven, no platform-specific code
 - **Composable templates**: Reuse shared content via Eta includes
 

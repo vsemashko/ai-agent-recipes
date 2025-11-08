@@ -21,61 +21,81 @@ Use this skill when you need to:
 - Find `project_namespace` in `.gitlab-ci.yml` (under `include.inputs.project_namespace`)
 - Find app name from `fullnameOverride` in deploy folder (usually `/deploy/base/values.yaml`)
 
-### 2. Query RightSize API
+### 2. Run RightSize Analysis Script
 
-For each region (sg, my, co.th, ae, hk):
+**Use the provided script to fetch API recommendations:**
 
-**CPU Recommendations:**
-
-```
-GET https://rightsize-api.production.stashaway.{region}/resource-recommendation/cpu?app={app}&namespace={namespace}
+```bash
+deno run --allow-net ~/.claude/skills/sa_rightsize/rightsize.ts <app-name> <namespace>
 ```
 
-**Memory Recommendations:**
+**Example:**
 
-```
-GET https://rightsize-api.production.stashaway.{region}/resource-recommendation/memory?app={app}&namespace={namespace}
+```bash
+deno run --allow-net ~/.claude/skills/sa_rightsize/rightsize.ts temporal-ts-general-worker app-temporal
 ```
 
-**Response Format:**
+**The script:**
+
+- Queries RightSize API for all regions (sg, my, co.th, ae, hk)
+- Fetches both CPU and memory recommendations for each region
+- Returns structured JSON with all recommendations
+- Handles API errors gracefully (e.g., regions behind VPN)
+
+**Output Format:**
 
 ```json
-[
-  {
-    "container": "app-container-name",
-    "requests": 0.605283630945885,
-    "limits": "null"
-  },
-  {
-    "container": "istio-proxy",
-    "requests": 0.0483945427650614,
-    "limits": "null"
-  }
-]
+{
+  "app": "funding-server",
+  "namespace": "funding",
+  "timestamp": "2025-01-09T10:30:00Z",
+  "regions": [
+    {
+      "region": "sg",
+      "containers": [
+        {
+          "container": "funding-server",
+          "cpu": {
+            "requests": 0.385
+          },
+          "memory": {
+            "requests": 234,
+            "limits": 270
+          }
+        },
+        {
+          "container": "istio-proxy",
+          "cpu": {
+            "requests": 0.073
+          },
+          "memory": {
+            "requests": 254,
+            "limits": 293
+          }
+        }
+      ]
+    },
+    {
+      "region": "my",
+      "containers": [],
+      "error": "Failed to fetch cpu from my: ..."
+    }
+  ]
+}
 ```
 
-**Note**: API may return "null" as a string; treat it as actual null.
+**Note:** The script only fetches recommendations. The AI agent should:
 
-### 3. Check Deployment Resources
-
-Look for resource definitions in:
-
-- `/deploy/base/values.yaml` (base configuration)
-- `/deploy/{region}-{env}/values.yaml` (environment-specific overrides)
-
-Resource locations:
-
-- Main container: `resources.requests` and `resources.limits`
-- Istio sidecar: `istio.sidecar.resources.requests` and `istio.sidecar.resources.limits`
-
-### 4. Compare and Recommend
-
+- Read current deployment configs from values.yaml files
 - Compare current values with recommendations
-- Allow rounding up recommendations to clean numbers
-- Keep existing settings if they're within 30% of recommendations
-- Flag resources that exceed recommendations by >30%
+- Calculate savings percentages
+- Determine if resources are optimal/over-provisioned/under-provisioned
 
-### 5. Update Resources and Commit Changes
+### 3. Analyze Results and Present to User
+
+Parse the JSON output and present findings in a user-friendly format (see Output Format section below)
+
+### 4. Update Resources and Commit Changes
 
 **This skill should automatically update files and commit changes** (not just recommend):
 
@@ -111,11 +131,15 @@ Resource locations:
 
 ```
 User: Can you check if this service is rightsized?
+
 Agent: I'll check the rightsize recommendations for this service.
-[Extracts namespace and app name]
-[Queries RightSize API for all regions]
-[Compares with current deploy configs]
-[Reports findings and suggests updates]
+[Extracts namespace and app name from .gitlab-ci.yml and values.yaml]
+[Runs: deno run --allow-net ~/.claude/skills/sa_rightsize/rightsize.ts temporal-ts-general-worker app-temporal]
+[Reads current deployment configs from ./deploy/base/values.yaml and region-specific overrides]
+[Compares API recommendations with current configs]
+[Calculates savings percentages]
+[Presents findings in user-friendly format]
+[Offers to update files and commit if improvements found]
 ```
 
 ## Output Format

@@ -94,6 +94,16 @@ echo ""
 if [ -f "$(pwd)/main.ts" ]; then
   echo "✓ Running from repository directory"
   repo_dir="$(pwd)"
+
+  # Detect current branch
+  if [ -d ".git" ]; then
+    current_branch=$(git branch --show-current)
+    if [ -n "$current_branch" ]; then
+      echo "✓ Detected branch: $current_branch"
+      # Store branch info for the installer to use
+      export AGENT_RECIPES_SOURCE_BRANCH="$current_branch"
+    fi
+  fi
 else
   # Clone or update the repository
   if [ -d "$agent_recipes_home/repo/.git" ]; then

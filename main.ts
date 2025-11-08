@@ -5,8 +5,9 @@ import { syncCommand } from './cli/commands/sync.ts'
 import { listCommand } from './cli/commands/list.ts'
 import { convertCommand } from './cli/commands/convert.ts'
 import { infoCommand } from './cli/commands/info.ts'
+import denoConfig from './deno.json' with { type: 'json' }
 
-const VERSION = '0.1.0'
+const VERSION = typeof denoConfig?.version === 'string' ? denoConfig.version : '0.0.0'
 
 const main = new Command()
   .name('agent-recipes')

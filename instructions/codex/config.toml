@@ -1,0 +1,4 @@
+# Codex Configuration (TOML format)
+
+[features]
+web_search_request = true        # allow the model to request web searches
