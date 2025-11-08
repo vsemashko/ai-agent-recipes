@@ -1,38 +1,43 @@
 # Contributing to StashAway Agent Recipes
 
-Thank you for contributing to the StashAway Agent Recipes repository! This guide will help you understand how to add new skills, modify the CLI, and
-contribute to the project.
+Thank you for contributing! This guide covers the essentials for adding skills and making changes.
+
+> **For detailed architecture, conventions, and development instructions**, see [CLAUDE.md](./CLAUDE.md).
 
 ## Table of Contents
 
 - [Development Setup](#development-setup)
 - [Project Structure](#project-structure)
 - [Adding a New Skill](#adding-a-new-skill)
-- [Modifying the CLI](#modifying-the-cli)
+- [Modifying Templates](#modifying-templates)
+- [Adding CLI Commands](#adding-cli-commands)
 - [Testing](#testing)
-- [Code Style](#code-style)
 - [Submitting Changes](#submitting-changes)
 
 ## Development Setup
 
 ### Prerequisites
 
-- **Deno 2.x**: Install from https://deno.land/install.sh
+- **Deno 2.x**: https://deno.land/install.sh
 - **Git**: For version control
-- **Access to StashAway GitLab**: For pushing changes
+- **StashAway GitLab Access**: For pushing changes
 
-### Initial Setup
+### Quick Start
 
 ```bash
-# Clone the repository
+# Clone repository
 git clone git@gitlab.stashaway.com:vladimir.semashko/stashaway-agent-recipes.git
 cd stashaway-agent-recipes
 
-# Run in development mode
+# Development
 deno task dev --help
 
-# Build the CLI
+# Build
 deno task build
+
+# Test
+deno task lint
+deno task fmt
 ```
 
 ## Project Structure
@@ -40,368 +45,243 @@ deno task build
 ```
 stashaway-agent-recipes/
 ├── main.ts                  # CLI entry point
-├── cli/                     # CLI modules (commands + shared libs)
-│   ├── commands/            # Command implementations
-│   │   ├── sync.ts          # Install/update/sync command
-│   │   ├── list.ts          # List skills
-│   │   ├── convert.ts       # Format conversion
-│   │   └── info.ts          # Show info
-│   └── lib/                 # Shared utilities
-│       ├── installer.ts     # Installation logic
-│       └── converter.ts     # Format conversions
-├── skills/                  # Skill definitions (managed with sa_ prefix)
-│   ├── sa_rightsize/        # RightSize checker skill
-│   └── sa_commit-message/   # Commit message formatter
-├── instructions/             # Platform-specific instructions
-│   └── claude-code/         # Claude Code global instructions
-│       └── CLAUDE.md        # Global instructions template
-├── install.sh               # Installation script
-├── CLAUDE.md                # Instructions for working ON this repo
-├── AGENTS.md                # Agent definitions for this repo
-├── CONTRIBUTING.md          # This file
+├── cli/
+│   ├── commands/            # sync.ts, list.ts, convert.ts, info.ts
+│   └── lib/                 # installer.ts, converter.ts
+├── skills/                  # Skill definitions (sa_ prefix)
+├── instructions/            # Platform templates (Eta)
+│   ├── GLOBAL_INSTRUCTIONS.md            # Global guidance (shared)
+│   ├── common/
+│   │   └── skills.eta      # Skills section template
+│   ├── claude/             # claude and other platforms configs
+│   │   └── main.eta        # → ~/.claude/CLAUDE.md
+├── install.sh              # configs installation script
 └── README.md                # User documentation
 ```
 
+See [CLAUDE.md](./CLAUDE.md) for detailed architecture and technology stack information.
+
 ## Adding a New Skill
 
-Skills provide specialized guidance to AI agents for common StashAway workflows.
-
-### 1. Create Skill Directory
+### 1. Create Skill
 
 ```bash
 mkdir skills/sa_my-skill
 ```
 
-### 2. Create SKILL.md
+**Note**: Managed skills use `sa_` prefix in directory, but `name` in frontmatter omits it.
 
-Create `skills/sa_my-skill/SKILL.md` with frontmatter and content (keep the `name` value without the `sa_` prefix):
+### 2. Create SKILL.md
 
 ```markdown
 ---
 name: my-skill
-description: Brief one-line description of what this skill does
+description: Brief one-line description
 ---
 
 # My Skill
 
 ## When to Use
 
-Describe when this skill should be invoked. Include:
-
-- Trigger conditions
-- Use cases
-- When NOT to use this skill
+Describe when this skill should be invoked.
 
 ## How It Works
 
-Provide step-by-step instructions for the AI agent:
+Provide step-by-step instructions:
 
-### 1. First Step
-
-Detailed instructions for the first step
-
-### 2. Second Step
-
-Detailed instructions for the second step
-
-### 3. Third Step
-
-And so on...
+1. First step
+2. Second step
+3. Third step
 
 ## Example Usage
 
-Show example interactions:
-
-\`\`\` User: Can you do [task]? Agent: I'll use the my-skill skill to accomplish this. [Agent follows the steps...] \`\`\`
-
-## Output Format
-
-Describe the expected output format, if applicable.
+Show realistic examples.
 
 ## Important Notes
 
-- Any caveats
+- Caveats
 - Limitations
-- Special considerations
 ```
 
-### 3. Test the Skill
+### 3. Test
 
 ```bash
-# Sync to your local Claude Code
-agent-recipes sync
-
-# Test with Claude Code
-# Ask Claude to perform the task related to your skill
+agent-recipes sync       # Sync to local tools
+agent-recipes list       # Verify skill appears
 ```
 
-### 4. Verify Format Conversion
+### 4. Verify Conversion
 
 ```bash
-# Convert to AGENTS.md format (for Codex)
-deno run --allow-read main.ts convert skills/sa_my-skill/SKILL.md --format agent-md
-
-# Or batch convert all skills
-deno run --allow-read main.ts convert skills --batch --format agent-md
+agent-recipes convert skills/sa_my-skill/SKILL.md --format agent-md
 ```
 
-### Skill Best Practices
+### Best Practices
 
-- **Be Specific**: Provide detailed, actionable steps
-- **Be Clear**: Use simple, direct language
-- **Be Complete**: Include all necessary information
-- **Add Examples**: Show realistic usage scenarios
-- **Consider Edge Cases**: Document limitations and special cases
-- **Use Proper Frontmatter**: Always include name and description
+- **Be Specific**: Detailed, actionable steps
+- **Be Clear**: Simple, direct language
+- **Add Examples**: Realistic usage scenarios
+- **Document Limits**: Edge cases and constraints
 
-## Modifying the CLI
+## Modifying Templates
 
-### Adding a New Command
+Templates use [Eta](https://eta.js.org/) templating.
 
-1. **Create command file** in `cli/commands/`:
+### Structure
+
+- `instructions/GLOBAL_INSTRUCTIONS.md` - Global guidance
+- `instructions/common/skills.eta` - Skills section
+- `instructions/{platform}/main.eta` - Platform templates
+
+### Making Changes
+
+1. Edit `.eta` files
+2. Use Eta syntax: `<%= it.variableName %>`
+3. Test: `agent-recipes sync`
+4. Verify: Check `~/.{platform}/`
+
+See [instructions/README.md](./instructions/README.md) for template documentation.
+
+## Adding CLI Commands
+
+### 1. Create Command
 
 ```typescript
 // cli/commands/my-command.ts
 import { Command } from '@cliffy/command'
 
 export const myCommand = new Command()
-  .description('What this command does')
-  .option('-f, --flag <value>', 'Description of flag')
-  .action(async (options) => {
-    // Implementation
-    console.log('Executing my command...')
+  .description('What this does')
+  .action(async () => {
+    console.log('Executing...')
   })
 ```
 
-2. **Register in main.ts**:
+### 2. Register
 
 ```typescript
-import { myCommand } from './commands/my-command.ts'
+// main.ts
+import { myCommand } from './cli/commands/my-command.ts'
 
 const main = new Command()
-  // ... existing commands
   .command('my-command', myCommand)
 ```
 
-3. **Test the command**:
+### 3. Test
 
 ```bash
-deno run --allow-all main.ts my-command
+deno task dev my-command
 ```
-
-### Modifying Installation Logic
-
-The installation logic is in `cli/lib/installer.ts`. Key methods:
-
-- `isInstalled()`: Check if already installed
-- `detectAITools()`: Auto-detect installed AI tools
-- `syncInstructions()`: Sync instructions to AI tools
-- `addToPath()`: Add CLI to system PATH
-
-**Important:**
-
-- Preserve backward compatibility
-- Test on fresh install
-- Test on update scenario
-- Verify PATH modification works
 
 ## Testing
 
-### Manual Testing
+### Development
 
 ```bash
-# Test specific command
-deno run --allow-all main.ts sync
-deno run --allow-all main.ts list
-deno run --allow-all main.ts info
+deno task fmt        # Format
+deno task lint       # Lint
+deno task build      # Build
+deno task dev sync   # Test sync
 ```
 
-### Testing Installation
+### Installation
 
 ```bash
-# Test installation script
-./install.sh
-
-# Verify PATH
-which agent-recipes
-
-# Test sync
-agent-recipes sync
-
-# Check installed files
-ls ~/.config/claude-code/
-ls ~/.codex/
-```
-
-### Running Tests
-
-```bash
-# Run tests
-deno test
-
-# Run tests with coverage
-deno test --coverage=coverage
-
-# Generate coverage report
-deno coverage coverage
-```
-
-## Code Style
-
-We follow Deno and TypeScript best practices:
-
-### Formatting
-
-```bash
-# Format code
-deno fmt
-
-# Check formatting
-deno fmt --check
-```
-
-### Linting
-
-```bash
-# Lint code
-deno lint
-```
-
-### Style Guidelines
-
-- Use TypeScript strict mode
-- Prefer `async/await` over callbacks
-- Use destructuring where appropriate
-- Add JSDoc comments for public APIs
-- Follow existing code patterns
-- Use meaningful variable names
-
-**Example:**
-
-```typescript
-/**
- * Syncs instructions from repository to AI tool configuration directories
- * @param tools - Array of tool names to sync
- * @param config - Installation configuration
- * @returns Updated configuration with new hashes
- */
-async syncInstructions(
-  tools: string[],
-  config: InstallConfig
-): Promise<InstallConfig> {
-  // Implementation
-}
+./install.sh              # Test install
+agent-recipes sync        # Test sync
+ls ~/.claude ~/.codex     # Verify output
 ```
 
 ## Submitting Changes
 
-### Branch Naming
-
-Follow the StashAway convention:
+### 1. Branch Naming
 
 ```
-<type>/<ticket-number>-<description>
+<type>/<ticket>-<description>
 ```
 
-**Examples:**
+Examples:
 
-- `feat/SA-604-add-new-skill`
-- `fix/SA-1234-fix-sync-issue`
-- `chore/SA-789-update-deps`
+- `feat/SA-604-add-skill`
+- `fix/SA-1234-fix-bug`
 
-### Commit Messages
+### 2. Commit Messages
 
-Follow the StashAway format:
+Use **sa_commit-message** skill or follow format:
 
 ```
-<type>: <ticket-number> <subject>
+<type>: <ticket> <subject>
 
 <body>
 ```
 
-**Example:**
+Example:
 
 ```
 feat: SA-123 Add database migration skill
 
-Adds a new skill to help with database migrations:
-- Query current schema
-- Generate migration files
-- Test migrations safely
+Adds skill for safe database migrations.
 ```
 
-### Pull Request Process
+### 3. Push and Create MR
 
-1. **Create feature branch** following naming convention
-2. **Make your changes**:
-   - Add/modify skills or code
-   - Test thoroughly
-   - Update documentation
-   - Run linter and formatter
-3. **Commit changes** with proper commit messages
-4. **Push to GitLab**:
-   ```bash
-   git push -u origin feat/SA-XXX-description
-   ```
-5. **Create Merge Request**:
-   - Provide clear description
-   - Reference related issues
-   - Add screenshots if relevant
-6. **Address review feedback**
-7. **Merge** once approved
+```bash
+git push -u origin feat/SA-XXX-description
+```
+
+Create Merge Request with:
+
+- Clear description
+- Reference ticket
+- Screenshots if relevant
 
 ### Pre-submission Checklist
 
-- [ ] Code follows style guidelines
-- [ ] Code passes linting (`deno lint`)
-- [ ] Code is formatted (`deno fmt`)
-- [ ] Tests pass (`deno test`)
-- [ ] Documentation is updated
-- [ ] Skill frontmatter is correct
-- [ ] Commit messages follow convention
-- [ ] Branch name follows convention
+- [ ] Formatted (`deno fmt`)
+- [ ] Linted (`deno lint`)
+- [ ] Build passes (`deno task build`)
+- [ ] `CHANGELOG.md` updated
+- [ ] Documentation updated
+- [ ] Branch/commit conventions followed
 
-## Troubleshooting Development Issues
+## Code Style
 
-### Deno Permission Errors
+See [CLAUDE.md](./CLAUDE.md) for detailed guidelines.
 
-Add necessary permissions:
+**Key points:**
+
+- TypeScript strict mode
+- Prefer `async/await`
+- JSDoc for public APIs
+- Follow existing patterns
+
+## Troubleshooting
+
+### Permission Errors
 
 ```bash
-deno run --allow-read --allow-write --allow-env --allow-run main.ts
-# Or for development:
 deno run --allow-all main.ts
 ```
 
 ### Import Errors
 
-Ensure using JSR imports:
+Use JSR imports:
 
 ```typescript
-import { Command } from '@cliffy/command' // ✅ Correct
-import { Command } from 'https://deno.land/x/cliffy' // ❌ Old style
+import { Command } from '@cliffy/command' // ✅
 ```
 
 ### Build Errors
 
 ```bash
-rm -rf dist/
+rm -rf bin/
 deno task build
 ```
 
-## Questions or Help?
-
-- **Issues**: [GitLab Issues](https://gitlab.stashaway.com/vladimir.semashko/stashaway-agent-recipes/-/issues)
-- **Slack**: #agent-recipes (to be created)
-- **Documentation**: README.md and CLAUDE.md
-
-## Resources
-
-- [Deno Documentation](https://deno.land/manual)
-- [Cliffy Documentation](https://cliffy.io/)
-- [Claude Code Documentation](https://docs.claude.com/claude-code)
-- [TypeScript Handbook](https://www.typescriptlang.org/docs/)
-
 ---
 
-_Thank you for contributing to StashAway Agent Recipes!_
+**Additional Resources:**
+
+- [CLAUDE.md](./CLAUDE.md) - Development instructions & architecture
+- [instructions/README.md](./instructions/README.md) - Template system
+- [CHANGELOG.md](./CHANGELOG.md) - Release history

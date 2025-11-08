@@ -1,6 +1,7 @@
 import { exists } from '@std/fs'
 import { dirname, join } from '@std/path'
 import { Confirm } from '@cliffy/prompt'
+import { Eta } from 'eta'
 import { batchConvertSkills } from './converter.ts'
 
 interface SyncSkillsOptions {
@@ -15,12 +16,49 @@ export interface InstallConfig {
   customPaths?: Record<string, string>
 }
 
+interface PlatformConfig {
+  name: string
+  dir: string
+  outputFile: string // Output filename (e.g., 'CLAUDE.md', 'AGENTS.md')
+  skillsFormat?: 'agent-md' // If set, convert & embed skills in main file with this format
+  pathReplacements?: Record<string, string>
+}
+
+const PLATFORM_CONFIGS: Record<string, PlatformConfig> = {
+  'claude': {
+    name: 'Claude Code',
+    dir: '.claude',
+    outputFile: 'CLAUDE.md',
+    // No skillsFormat = skills copied as-is to separate directory (no conversion, no embedding)
+  },
+
+  'codex': {
+    name: 'Codex',
+    dir: '.codex',
+    outputFile: 'AGENTS.md',
+    skillsFormat: 'agent-md', // Convert & embed skills in AGENTS.md
+    pathReplacements: {
+      '~/.claude': '~/.codex',
+    },
+  },
+
+  'opencode': {
+    name: 'OpenCode',
+    dir: '.opencode',
+    outputFile: 'AGENTS.md',
+    skillsFormat: 'agent-md', // Convert & embed skills in AGENTS.md
+    pathReplacements: {
+      '~/.claude': '~/.opencode',
+    },
+  },
+}
+
 export class Installer {
   private homeDir: string
   private installDir: string
   private configPath: string
   private binPath: string
-  private templateCache: Map<string, string>
+  private eta: Eta
   private modifyPath: boolean
 
   constructor() {
@@ -36,7 +74,12 @@ export class Installer {
       join(this.homeDir, '.stashaway-agent-recipes')
     this.configPath = join(this.installDir, 'config.json')
     this.binPath = join(this.installDir, 'bin')
-    this.templateCache = new Map()
+
+    // Initialize Eta templating engine
+    this.eta = new Eta({
+      cache: true,
+      autoEscape: false, // We're rendering markdown, not HTML
+    })
 
     const modifyPathEnv = Deno.env.get('AGENT_RECIPES_MODIFY_PATH')
     this.modifyPath = modifyPathEnv === undefined ? true : modifyPathEnv !== '0'
@@ -69,20 +112,21 @@ export class Installer {
     const tools: string[] = []
 
     // Check for Claude Code
-    const claudeCodePaths = [
-      join(this.homeDir, '.claude'),
-    ]
-    for (const path of claudeCodePaths) {
-      if (await exists(path)) {
-        tools.push('claude-code')
-        break
-      }
+    const claudePath = join(this.homeDir, '.claude')
+    if (await exists(claudePath)) {
+      tools.push('claude')
     }
 
     // Check for Codex
     const codexPath = join(this.homeDir, '.codex')
     if (await exists(codexPath)) {
       tools.push('codex')
+    }
+
+    // Check for OpenCode
+    const opencodePath = join(this.homeDir, '.opencode')
+    if (await exists(opencodePath)) {
+      tools.push('opencode')
     }
 
     return tools
@@ -108,8 +152,9 @@ export class Installer {
     const selectedTools: string[] = []
 
     const tools = [
-      { name: 'Claude Code', value: 'claude-code' },
+      { name: 'Claude Code', value: 'claude' },
       { name: 'Codex CLI', value: 'codex' },
+      { name: 'OpenCode', value: 'opencode' },
     ]
 
     for (const tool of tools) {
@@ -235,15 +280,11 @@ export class Installer {
       )
     }
 
-    for (const tool of installedTools) {
+    for (const platform of installedTools) {
       try {
-        if (tool === 'claude-code') {
-          await this.syncClaudeCode(repoRoot)
-        } else if (tool === 'codex') {
-          await this.syncCodex(repoRoot)
-        }
+        await this.syncPlatform(platform, repoRoot)
       } catch (error) {
-        console.error(`⚠ Failed to sync ${tool}:`, error)
+        console.error(`⚠ Failed to sync ${platform}:`, error)
       }
     }
 
@@ -253,82 +294,56 @@ export class Installer {
     }
   }
 
-  private async syncClaudeCode(repoRoot: string): Promise<void> {
-    const sourcePath = join(repoRoot, 'instructions', 'claude-code')
-    if (!await exists(sourcePath)) {
-      console.log('ℹ Claude Code instructions not found in repository')
-      return
+  private async syncPlatform(platformKey: string, repoRoot: string): Promise<void> {
+    const config = PLATFORM_CONFIGS[platformKey]
+    if (!config) {
+      throw new Error(`Unknown platform: ${platformKey}`)
     }
 
-    const targetPath = join(this.homeDir, '.claude')
-    await Deno.mkdir(targetPath, { recursive: true })
+    const targetDir = join(this.homeDir, config.dir)
+    await Deno.mkdir(targetDir, { recursive: true })
 
-    // Sync CLAUDE.md with managed section
-    const claudeMdSource = join(sourcePath, 'CLAUDE.md')
-    const claudeMdTarget = join(targetPath, 'CLAUDE.md')
-
-    let ourContent = ''
-    if (await exists(claudeMdSource)) {
-      ourContent = await Deno.readTextFile(claudeMdSource)
+    // Build template data
+    const data: Record<string, unknown> = {
+      platform: platformKey,
+      agents: (await this.loadGlobalInstructions(repoRoot)).trim(),
+      skillsSection: '', // Default to empty string
     }
-    // Always sync (creates file if missing, updates if exists)
-    await this.syncManagedFile(claudeMdTarget, ourContent, 'Claude Code CLAUDE.md')
 
-    // Sync skills (managed copies keep sa_ prefix)
-    const skillsSource = join(repoRoot, 'skills')
-    const skillsTarget = join(targetPath, 'skills')
-
-    if (await exists(skillsSource)) {
-      await this.syncSkills(skillsSource, skillsTarget)
-    }
-  }
-
-  private async syncCodex(repoRoot: string): Promise<void> {
-    const targetPath = join(this.homeDir, '.codex')
-    await Deno.mkdir(targetPath, { recursive: true })
-
-    // Auto-generate AGENTS.md from CLAUDE.md + skills
-    const claudeMdPath = join(repoRoot, 'instructions', 'claude-code', 'CLAUDE.md')
-    const skillsDir = join(repoRoot, 'skills')
-    const templatesDir = join(repoRoot, 'instructions', 'templates')
-    const agentsTemplatePath = join(templatesDir, 'AGENTS.template.md')
-
-    try {
-      // Read CLAUDE.md (optional)
-      const claudeMdContent = await exists(claudeMdPath) ? await Deno.readTextFile(claudeMdPath) : ''
-
-      // Convert all skills with codex-specific paths
+    // Add skills if needed (convert & embed in main file)
+    if (config.skillsFormat) {
+      const skillsDir = join(repoRoot, 'skills')
       const results = await batchConvertSkills(
         skillsDir,
-        'agent-md',
-        (skillDirName) => `~/.codex/skills/${this.getManagedSkillDirName(skillDirName)}/SKILL.md`,
+        config.skillsFormat,
+        (skillDir) => `~/${config.dir}/skills/${this.getManagedSkillDirName(skillDir)}/SKILL.md`,
       )
+      const skillsList = results.map((r) => r.output).join('\n').trim()
 
-      // Build skills list
-      // deno-lint-ignore no-explicit-any
-      const skillsList = results.map((r: { output: any }) => r.output).join('\n')
+      // Render skills section template
+      const skillsTemplatePath = join(repoRoot, 'instructions', 'common', 'skills.eta')
+      const skillsSection = await this.renderTemplate(skillsTemplatePath, { skillsList })
 
-      const managedContent = await this.renderTemplate(agentsTemplatePath, {
-        globalInstructions: claudeMdContent.trim(),
-        skillsList: skillsList.trim(),
+      data.skillsSection = skillsSection
+
+      console.log(`  ✓ Generated skills list with ${results.length} skill(s)`)
+    }
+
+    // Render main file from template
+    const templatePath = join(repoRoot, 'instructions', platformKey, 'main.eta')
+    const content = await this.renderTemplate(templatePath, data)
+
+    // Sync main file with managed section
+    const mainFilePath = join(targetDir, config.outputFile)
+    await this.syncManagedFile(mainFilePath, content, `${config.name} ${config.outputFile}`)
+
+    // Sync skills directory
+    const skillsSource = join(repoRoot, 'skills')
+    if (await exists(skillsSource)) {
+      const skillsTarget = join(targetDir, 'skills')
+      await this.syncSkills(skillsSource, skillsTarget, {
+        pathReplacements: config.pathReplacements,
       })
-
-      // Sync with managed section
-      const targetFile = join(targetPath, 'AGENTS.md')
-      await this.syncManagedFile(targetFile, managedContent, 'Codex AGENTS.md')
-
-      // Copy skills to .codex/skills directory
-      const targetSkillsDir = join(targetPath, 'skills')
-      const codexPathReplacements = {
-        '~/.claude/skills': '~/.codex/skills',
-        '~/.claude': '~/.codex',
-      }
-      await this.syncSkills(skillsDir, targetSkillsDir, { pathReplacements: codexPathReplacements })
-
-      console.log(`  ✓ Synced AGENTS.md with global instructions + ${results.length} skill(s)`)
-    } catch (error) {
-      // deno-lint-ignore no-explicit-any
-      console.error('  ⚠ Failed to generate AGENTS.md:', (error as any).message)
     }
   }
 
@@ -486,22 +501,17 @@ export class Installer {
     await Deno.writeTextFile(targetPath, updatedContent)
   }
 
-  private async loadTemplate(templatePath: string): Promise<string> {
-    const cached = this.templateCache.get(templatePath)
-    if (cached) return cached
-
-    const content = await Deno.readTextFile(templatePath)
-    this.templateCache.set(templatePath, content)
-    return content
+  private async loadGlobalInstructions(repoRoot: string): Promise<string> {
+    const globalInstructionsPath = join(repoRoot, 'instructions', 'GLOBAL_INSTRUCTIONS.md')
+    if (await exists(globalInstructionsPath)) {
+      return await Deno.readTextFile(globalInstructionsPath)
+    }
+    return ''
   }
 
   private async renderTemplate(templatePath: string, data: Record<string, unknown>): Promise<string> {
-    const template = await this.loadTemplate(templatePath)
-    const rendered = template.replace(/{{\s*([\w.]+)\s*}}/g, (_, key) => {
-      const value = data[key]
-      return typeof value === 'string' ? value : ''
-    })
-
+    const template = await Deno.readTextFile(templatePath)
+    const rendered = await this.eta.renderStringAsync(template, data)
     return rendered.trimEnd()
   }
 

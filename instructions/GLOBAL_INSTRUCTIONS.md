@@ -4,8 +4,7 @@
 
 ### Branch Naming & Commit Messages
 
-For branch naming conventions and commit message formatting, use the **sa_commit-message** skill. This skill will guide you through proper formatting
-following StashAway standards.
+For branch naming conventions and commit message formatting, use the **commit-message** skill. This skill will guide you through proper formatting following StashAway standards.
 
 ### Code Quality
 

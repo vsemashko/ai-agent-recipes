@@ -78,7 +78,13 @@ To use a skill, simply ask Claude naturally:
 ### Codex CLI
 
 - **Location**: `~/.codex/`
-- **Format**: Auto-generated AGENTS.md from global instructions + skills
+- **Format**: AGENTS.md with embedded instructions + skills
+- **Setup**: Automatic via `agent-recipes sync`
+
+### OpenCode
+
+- **Location**: `~/.opencode/`
+- **Format**: AGENTS.md with embedded instructions + skills
 - **Setup**: Automatic via `agent-recipes sync`
 
 ## 🔄 Keeping Up to Date
@@ -128,6 +134,27 @@ The synced files use **managed sections**. You can safely add your own content a
 [Managed instructions live here and are replaced on sync]
 </stashaway-recipes-managed-section>
 ```
+
+`instructions/GLOBAL_INSTRUCTIONS.md` is the single source of truth for the managed block. Update that file when editing global guidance—platform
+templates automatically inject it during `agent-recipes sync`.
+
+### Template System
+
+We use [Eta](https://eta.js.org/) templating for flexible, maintainable instruction generation:
+
+- `instructions/GLOBAL_INSTRUCTIONS.md` - Shared guidance embedded into all platforms
+- `instructions/{platform}/main.eta` - Platform-specific templates
+- `instructions/common/skills.eta` - Shared skills section template
+
+### Platform-Specific Customization
+
+To customize instructions for a specific platform:
+
+1. Edit `instructions/{platform}/main.eta` (e.g., `codex/main.eta`)
+2. Add platform-specific content using Eta syntax
+3. Run `agent-recipes sync` to apply changes
+
+See `instructions/README.md` for detailed template documentation.
 
 **On sync:**
 

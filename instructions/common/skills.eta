@@ -1,16 +1,9 @@
-# StashAway Agent Instructions
-
-
-{{globalInstructions}}
-
----
-
 ## Available Skills
 
-You’ve got skills.
+You've got skills.
 **Check this skills list before EVERY task. If a skill matches a certain task at hand, read its SKILL.md and follow all instructions.**
 
-{{skillsList}}
+<%= it.skillsList %>
 
 ### Skill Usage
 **CRITICAL: Follow this workflow for EVERY task:**
@@ -22,7 +15,7 @@ You’ve got skills.
 ### Examples
 
 **Task: "Check if service is rightsized"**
-→ Match: - **rightsize** (`<path>/skills/sa_rightsize/SKILL.md`) - Check if the Kubernetes deployment resources for the service match the RightSize API recommendations, and update the configurations if they don’t
+→ Match: - **rightsize** (`<path>/skills/sa_rightsize/SKILL.md`) - Check if the Kubernetes deployment resources for the service match the RightSize API recommendations, and update the configurations if they don't
 → Action: Read the rightsize SKILL.md and follow its instructions
 
 ### Important Notes
