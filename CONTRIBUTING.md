@@ -54,7 +54,8 @@ stashaway-agent-recipes/
 │   ├── common/
 │   │   └── skills.eta      # Skills section template
 │   ├── claude/             # claude and other platforms configs
-│   │   └── main.eta        # → ~/.claude/CLAUDE.md
+│   │   ├── CLAUDE.md.eta   # → ~/.claude/CLAUDE.md
+│   │   └── AGENTS.md.eta   # → ~/.claude/AGENTS.md
 ├── install.sh              # configs installation script
 └── README.md                # User documentation
 ```
@@ -131,7 +132,7 @@ Templates use [Eta](https://eta.js.org/) templating.
 
 - `instructions/GLOBAL_INSTRUCTIONS.md` - Global guidance
 - `instructions/common/skills.eta` - Skills section
-- `instructions/{platform}/main.eta` - Platform templates
+- `instructions/{platform}/*.eta` - Platform templates (filenames determine outputs)
 
 ### Making Changes
 

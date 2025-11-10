@@ -3,8 +3,11 @@ import { Installer } from '../lib/installer.ts'
 
 export const syncCommand = new Command()
   .description('Install/update/sync agent recipes (handles initial install and updates)')
-  .action(async () => {
-    const installer = new Installer()
+  .option('--skip-configs', 'Skip syncing configuration files')
+  .option('--yes, -y', 'Auto-approve all changes without prompting')
+  .option('--verbose, -v', 'Show verbose output during sync')
+  .action(async (options) => {
+    const installer = new Installer({ verbose: Boolean(options.verbose) })
 
     try {
       const isInstalled = await installer.isInstalled()
@@ -44,6 +47,14 @@ export const syncCommand = new Command()
         const updatedConfig = await installer.syncInstructions(tools, config)
         await installer.saveConfig(updatedConfig)
 
+        // Sync configs (if not skipped)
+        if (!options.skipConfigs) {
+          await installer.syncConfigs(tools, updatedConfig, Boolean(options.yes))
+        }
+
+        const installedVersion = await installer.getInstalledRecipesVersion()
+        await installer.recordInstalledRecipesVersion(installedVersion)
+
         console.log('\n✅ Installation complete!')
         console.log(`\n📁 Installed to: ${installer.getInstallPath()}`)
         console.log('\n💡 Next steps:')
@@ -61,28 +72,13 @@ export const syncCommand = new Command()
         Deno.exit(1)
       }
 
+      const previousVersion = await installer.getInstalledRecipesVersion()
       const updateInfo = await installer.checkForUpdates()
 
       if (updateInfo?.hasUpdate) {
-        console.log(`📦 New version available!`)
-        console.log(`   Current: ${updateInfo.currentVersion}`)
-        console.log(`   Latest:  ${updateInfo.latestVersion}`)
-
-        if (updateInfo.changelogDiff) {
-          console.log('\n📄 Changelog diff since your version:\n')
-          console.log(updateInfo.changelogDiff)
-          console.log()
-        }
-
-        console.log('📥 Updating to latest version...\n')
-        const pullSuccess = await installer.pullLatestChanges()
-        if (!pullSuccess) {
-          console.error('❌ Failed to pull latest changes')
-          Deno.exit(1)
-        }
-        console.log('✓ Repository updated to latest version\n')
+        console.log(`📦 Update available (${previousVersion ?? 'unknown'} → latest)\n`)
       } else if (updateInfo) {
-        console.log(`✓ Already on latest version (${updateInfo.currentVersion})\n`)
+        console.log(`✓ Already on latest version (${previousVersion ?? 'unknown'})\n`)
       } else {
         console.log('✓ Version check skipped\n')
       }
@@ -91,15 +87,32 @@ export const syncCommand = new Command()
       const pullSuccess = await installer.pullLatestChanges()
       if (pullSuccess) {
         console.log('✓ Repository refreshed\n')
+
+        const newVersion = await installer.getInstalledRecipesVersion()
+        if (updateInfo?.hasUpdate) {
+          console.log(`📦 Updated recipes to ${newVersion ?? 'latest'} (was ${previousVersion ?? 'unknown'})`)
+          const changelogReference = updateInfo.changelogUrl ?? 'CHANGELOG.md'
+          console.log(`📄 Changelog: ${changelogReference}\n`)
+        }
+        await installer.recordInstalledRecipesVersion(newVersion)
       } else {
         console.log('  ⚠ Could not refresh repository automatically (non-git install?)')
         console.log('    Continuing with existing files\n')
+
+        if (updateInfo?.hasUpdate) {
+          console.error('❌ Failed to pull latest changes')
+          Deno.exit(1)
+        }
       }
 
-      console.log('📝 Syncing instructions...\n')
       const updatedConfig = await installer.syncInstructions(config.installedTools, config)
       updatedConfig.lastUpdateCheck = new Date().toISOString()
       await installer.saveConfig(updatedConfig)
+
+      // Sync configs (if not skipped)
+      if (!options.skipConfigs) {
+        await installer.syncConfigs(config.installedTools, updatedConfig, Boolean(options.yes))
+      }
 
       console.log('✅ Sync complete!')
     } catch (error) {

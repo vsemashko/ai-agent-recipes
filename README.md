@@ -143,14 +143,14 @@ templates automatically inject it during `agent-recipes sync`.
 We use [Eta](https://eta.js.org/) templating for flexible, maintainable instruction generation:
 
 - `instructions/GLOBAL_INSTRUCTIONS.md` - Shared guidance embedded into all platforms
-- `instructions/{platform}/main.eta` - Platform-specific templates
+- `instructions/{platform}/*.eta` - Platform-specific templates (filenames determine outputs)
 - `instructions/common/skills.eta` - Shared skills section template
 
 ### Platform-Specific Customization
 
 To customize instructions for a specific platform:
 
-1. Edit `instructions/{platform}/main.eta` (e.g., `codex/main.eta`)
+1. Edit `instructions/{platform}/*.eta` (e.g., `codex/AGENTS.md.eta`)
 2. Add platform-specific content using Eta syntax
 3. Run `agent-recipes sync` to apply changes
 
@@ -198,6 +198,20 @@ We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for:
 Quick overview:
 
 1. Create a feature branch: `<type>/<ticket>-<description>`
+
+### Versioning & Releases
+
+- Project version lives in `deno.json` (and powers the CLI `--version` flag).
+- Run `deno task release` to cut a release:
+  1. Lints/tests the repo (unless `--skip-tests`)
+  2. Prompts for the next semver (patch/minor/major)
+  3. Inserts a new `CHANGELOG.md` section seeded from git commits (you can edit it in your `$EDITOR`)
+  4. Updates `deno.json`, and if you're on `main`, commits + tags `Release <version>` (feature branches skip the commit/tag so you can land changes
+     via MR).
+- After running on `main`, push the branch & tags: `git push && git push --tags`.
+- When running from a feature branch, review and commit `deno.json` + `CHANGELOG.md` as part of your merge request, then tag the release on `main`
+  once merged.
+
 2. Add your skill in `skills/sa_my-skill/SKILL.md` (keep the `name` field without the prefix)
 3. Test with `agent-recipes sync`
 4. Submit a merge request

@@ -3,10 +3,9 @@ import { dirname, join } from '@std/path'
 import { Confirm } from '@cliffy/prompt'
 import { Eta } from 'eta'
 import { batchConvertSkills } from './converter.ts'
-
-interface SyncSkillsOptions {
-  pathReplacements?: Record<string, string>
-}
+import { ConfigParserFactory } from './config-format.ts'
+import { type ConfigChange, ConfigMerger, type MergeStrategy } from './config-merger.ts'
+import { StateManager } from './state-manager.ts'
 
 export interface InstallConfig {
   version: string
@@ -19,38 +18,68 @@ export interface InstallConfig {
 interface PlatformConfig {
   name: string
   dir: string
-  outputFile: string // Output filename (e.g., 'CLAUDE.md', 'AGENTS.md')
-  skillsFormat?: 'agent-md' // If set, convert & embed skills in main file with this format
+  skillsFormat?: 'agent-md' // If set, convert & embed skills in templates with this format
   pathReplacements?: Record<string, string>
+  configFile?: string // Config filename (same in both user dir and repo)
+  configMergeStrategy?: MergeStrategy[] // Custom merge strategy for this platform's config
 }
 
 const PLATFORM_CONFIGS: Record<string, PlatformConfig> = {
   'claude': {
     name: 'Claude Code',
     dir: '.claude',
-    outputFile: 'CLAUDE.md',
     // No skillsFormat = skills copied as-is to separate directory (no conversion, no embedding)
+    configFile: 'config.json',
   },
 
   'codex': {
     name: 'Codex',
     dir: '.codex',
-    outputFile: 'AGENTS.md',
-    skillsFormat: 'agent-md', // Convert & embed skills in AGENTS.md
+    skillsFormat: 'agent-md', // Convert & embed skills in templates
     pathReplacements: {
       '~/.claude': '~/.codex',
     },
+    configFile: 'config.toml',
   },
 
   'opencode': {
     name: 'OpenCode',
     dir: '.opencode',
-    outputFile: 'AGENTS.md',
-    skillsFormat: 'agent-md', // Convert & embed skills in AGENTS.md
+    skillsFormat: 'agent-md', // Convert & embed skills in templates
     pathReplacements: {
       '~/.claude': '~/.opencode',
     },
+    configFile: 'config.json',
   },
+}
+
+interface InstallerOptions {
+  verbose?: boolean
+  homeDir?: string
+  installDir?: string
+}
+
+type ManagedFileChangeAction = 'created' | 'updated'
+
+interface ManagedFileChange {
+  file: string
+  action: ManagedFileChangeAction
+}
+
+interface PlatformSyncSummary {
+  key: string
+  name: string
+  fileChanges: ManagedFileChange[]
+  skillUpdates: number
+}
+
+interface SyncSkillsOptions {
+  pathReplacements?: Record<string, string>
+}
+
+interface UpdateCheckResult {
+  hasUpdate: boolean
+  changelogUrl?: string
 }
 
 export class Installer {
@@ -60,9 +89,13 @@ export class Installer {
   private binPath: string
   private eta: Eta
   private modifyPath: boolean
+  private stateManager: StateManager
+  private configMerger: ConfigMerger
+  private verbose: boolean
 
-  constructor() {
-    this.homeDir = Deno.env.get('HOME') || Deno.env.get('USERPROFILE') || ''
+  constructor(options: InstallerOptions = {}) {
+    this.verbose = Boolean(options.verbose)
+    this.homeDir = options.homeDir || Deno.env.get('HOME') || Deno.env.get('USERPROFILE') || ''
 
     if (!this.homeDir) {
       throw new Error(
@@ -70,8 +103,8 @@ export class Installer {
       )
     }
 
-    this.installDir = Deno.env.get('AGENT_RECIPES_HOME') ||
-      join(this.homeDir, '.stashaway-agent-recipes')
+    const defaultInstallDir = join(this.homeDir, '.stashaway-agent-recipes')
+    this.installDir = options.installDir || Deno.env.get('AGENT_RECIPES_HOME') || defaultInstallDir
     this.configPath = join(this.installDir, 'config.json')
     this.binPath = join(this.installDir, 'bin')
 
@@ -83,6 +116,10 @@ export class Installer {
 
     const modifyPathEnv = Deno.env.get('AGENT_RECIPES_MODIFY_PATH')
     this.modifyPath = modifyPathEnv === undefined ? true : modifyPathEnv !== '0'
+
+    // Initialize state manager and config merger
+    this.stateManager = new StateManager(this.installDir)
+    this.configMerger = new ConfigMerger()
   }
 
   async isInstalled(): Promise<boolean> {
@@ -249,7 +286,7 @@ export class Installer {
   }
 
   async syncInstructions(tools: string[], config: InstallConfig): Promise<InstallConfig> {
-    console.log('\n📝 Syncing instructions...\n')
+    console.log('📝 Syncing instructions...\n')
 
     const repoRoot = await this.resolveRepositoryRoot()
     if (!repoRoot) {
@@ -280,12 +317,40 @@ export class Installer {
       )
     }
 
+    const summaries: PlatformSyncSummary[] = []
+
     for (const platform of installedTools) {
       try {
-        await this.syncPlatform(platform, repoRoot)
+        const summary = await this.syncPlatform(platform, repoRoot)
+        summaries.push(summary)
       } catch (error) {
         console.error(`⚠ Failed to sync ${platform}:`, error)
       }
+    }
+
+    const changedPlatforms = summaries.filter((summary) => summary.fileChanges.length > 0 || summary.skillUpdates > 0)
+
+    if (changedPlatforms.length > 0) {
+      console.log('📝 Instructions updated:')
+      for (const summary of changedPlatforms) {
+        const parts: string[] = []
+
+        if (summary.fileChanges.length > 0) {
+          const fileDescriptions = summary.fileChanges.map((change) =>
+            `${change.action === 'created' ? 'created' : 'updated'} ${change.file} managed section`
+          )
+          parts.push(fileDescriptions.join(', '))
+        }
+
+        if (summary.skillUpdates > 0) {
+          const label = summary.skillUpdates === 1 ? 'skill' : 'skills'
+          parts.push(`synced ${summary.skillUpdates} managed ${label}`)
+        }
+
+        console.log(`  • ${summary.name}: ${parts.join('; ')}`)
+      }
+    } else {
+      this.logVerbose('\n📝 Instructions are up to date')
     }
 
     return {
@@ -294,7 +359,7 @@ export class Installer {
     }
   }
 
-  private async syncPlatform(platformKey: string, repoRoot: string): Promise<void> {
+  private async syncPlatform(platformKey: string, repoRoot: string): Promise<PlatformSyncSummary> {
     const config = PLATFORM_CONFIGS[platformKey]
     if (!config) {
       throw new Error(`Unknown platform: ${platformKey}`)
@@ -303,6 +368,13 @@ export class Installer {
     const targetDir = join(this.homeDir, config.dir)
     await Deno.mkdir(targetDir, { recursive: true })
 
+    const summary: PlatformSyncSummary = {
+      key: platformKey,
+      name: config.name,
+      fileChanges: [],
+      skillUpdates: 0,
+    }
+
     // Build template data
     const data: Record<string, unknown> = {
       platform: platformKey,
@@ -310,7 +382,7 @@ export class Installer {
       skillsSection: '', // Default to empty string
     }
 
-    // Add skills if needed (convert & embed in main file)
+    // Add skills if needed (convert & embed in templates)
     if (config.skillsFormat) {
       const skillsDir = join(repoRoot, 'skills')
       const results = await batchConvertSkills(
@@ -322,29 +394,49 @@ export class Installer {
 
       // Render skills section template
       const skillsTemplatePath = join(repoRoot, 'instructions', 'common', 'skills.eta')
-      const skillsSection = await this.renderTemplate(skillsTemplatePath, { skillsList })
-
-      data.skillsSection = skillsSection
-
-      console.log(`  ✓ Generated skills list with ${results.length} skill(s)`)
+      data.skillsSection = await this.renderTemplate(skillsTemplatePath, { skillsList })
+      this.logVerbose(`  ✓ Generated skills list with ${results.length} skill(s)`)
     }
 
-    // Render main file from template
-    const templatePath = join(repoRoot, 'instructions', platformKey, 'main.eta')
-    const content = await this.renderTemplate(templatePath, data)
+    // Find and process all .eta templates in the platform directory
+    const templatesDir = join(repoRoot, 'instructions', platformKey)
+    const templates: string[] = []
 
-    // Sync main file with managed section
-    const mainFilePath = join(targetDir, config.outputFile)
-    await this.syncManagedFile(mainFilePath, content, `${config.name} ${config.outputFile}`)
+    for await (const entry of Deno.readDir(templatesDir)) {
+      if (entry.isFile && entry.name.endsWith('.eta')) {
+        templates.push(entry.name)
+      }
+    }
+
+    this.logVerbose(`  📝 Found ${templates.length} template(s) for ${platformKey}:`, templates)
+
+    // Render and sync each template
+    for (const templateFile of templates) {
+      const templatePath = join(templatesDir, templateFile)
+      const content = await this.renderTemplate(templatePath, data)
+
+      // Derive output filename by removing .eta extension
+      const outputFile = templateFile.slice(0, -4) // Remove '.eta'
+      const outputPath = join(targetDir, outputFile)
+
+      this.logVerbose(`  📄 Processing: ${templateFile} → ${outputFile}`)
+      const description = `${config.name} ${outputFile}`
+      const change = await this.syncManagedFile(outputPath, content, description)
+      if (change) {
+        summary.fileChanges.push({ file: outputFile, action: change })
+      }
+    }
 
     // Sync skills directory
     const skillsSource = join(repoRoot, 'skills')
     if (await exists(skillsSource)) {
       const skillsTarget = join(targetDir, 'skills')
-      await this.syncSkills(skillsSource, skillsTarget, {
+      summary.skillUpdates = await this.syncSkills(skillsSource, skillsTarget, {
         pathReplacements: config.pathReplacements,
       })
     }
+
+    return summary
   }
 
   /**
@@ -355,7 +447,7 @@ export class Installer {
     targetPath: string,
     ourManagedContent: string,
     description: string,
-  ): Promise<void> {
+  ): Promise<ManagedFileChangeAction | null> {
     const MARKER_START = '<stashaway-recipes-managed-section>'
     const MARKER_END = '</stashaway-recipes-managed-section>'
 
@@ -371,25 +463,25 @@ export class Installer {
       ].join('')
 
       await Deno.writeTextFile(targetPath, initialContent)
-      console.log(`  ✓ Created ${description} with managed section`)
-      return
+      this.logVerbose(`  ✓ Created ${description} managed section`)
+      return 'created'
     }
 
     // File exists - split and replace managed section
-    const content = await Deno.readTextFile(targetPath)
-    const markerIndex = content.indexOf(MARKER_START)
-    const markerEndIndex = content.indexOf(MARKER_END)
+    const originalContent = await Deno.readTextFile(targetPath)
+    const markerIndex = originalContent.indexOf(MARKER_START)
+    const markerEndIndex = originalContent.indexOf(MARKER_END)
 
     let userContent: string
     let hadManagedSection: boolean
 
     if (markerIndex === -1 || markerEndIndex === -1 || markerEndIndex < markerIndex) {
       // No managed section yet - keep all content as user content
-      userContent = content.trim()
+      userContent = originalContent.trim()
       hadManagedSection = false
     } else {
       // Extract user content (everything before marker)
-      userContent = content.substring(0, markerIndex).trim()
+      userContent = originalContent.substring(0, markerIndex).trim()
       hadManagedSection = true
     }
 
@@ -404,16 +496,26 @@ export class Installer {
     // Reconstruct: user content + our managed section
     const newContent = userContent.length > 0 ? `${userContent.trimEnd()}\n\n${managedBlock}\n` : `${managedBlock}\n`
 
+    if (newContent === originalContent) {
+      this.logVerbose(`  ↺ ${description} already up to date`)
+      return null
+    }
+
     await Deno.writeTextFile(targetPath, newContent)
-    console.log(
+    this.logVerbose(
       hadManagedSection ? `  ✓ Updated managed section in ${description}` : `  ✓ Added managed section to ${description}`,
     )
+    return 'updated'
   }
 
   /**
    * Sync skills ensuring managed copies use sa_ prefix (always replace our managed skills)
    */
-  private async syncSkills(sourceDir: string, targetDir: string, options?: SyncSkillsOptions): Promise<void> {
+  private async syncSkills(
+    sourceDir: string,
+    targetDir: string,
+    options?: SyncSkillsOptions,
+  ): Promise<number> {
     await Deno.mkdir(targetDir, { recursive: true })
 
     // Get list of skills from repo
@@ -426,18 +528,30 @@ export class Installer {
       }
     }
 
+    let updatedSkills = 0
+
     // Sync each repo skill directory (managed copies keep sa_ prefix)
     for (const { dirName, targetName } of repoSkills) {
       const sourcePath = join(sourceDir, dirName)
       const targetPath = join(targetDir, targetName)
 
-      // Always replace - no questions asked
-      if (await exists(targetPath)) {
-        await Deno.remove(targetPath, { recursive: true })
+      const needsUpdate = await this.skillNeedsUpdate(
+        sourcePath,
+        targetPath,
+        options?.pathReplacements,
+      )
+
+      if (needsUpdate) {
+        if (await exists(targetPath)) {
+          await Deno.remove(targetPath, { recursive: true })
+        }
+        await this.copyDirectory(sourcePath, targetPath, options)
+        this.logVerbose(`  ✓ Synced skill: ${targetName}`)
+        updatedSkills++
+        continue
       }
 
-      await this.copyDirectory(sourcePath, targetPath, options)
-      console.log(`  ✓ Synced skill: ${targetName}`)
+      this.logVerbose(`  ↺ Skill already up to date: ${targetName}`)
     }
 
     // Count user's custom skills (no sa_ prefix)
@@ -449,8 +563,90 @@ export class Installer {
     }
 
     if (customCount > 0) {
-      console.log(`  ℹ  Preserved ${customCount} custom skill(s)`)
+      this.logVerbose(`  ℹ  Preserved ${customCount} custom skill(s)`)
     }
+
+    return updatedSkills
+  }
+
+  private async skillNeedsUpdate(
+    sourcePath: string,
+    targetPath: string,
+    replacements?: Record<string, string>,
+  ): Promise<boolean> {
+    if (!await exists(targetPath)) {
+      return true
+    }
+
+    const sourceSnapshot = await this.createDirectorySnapshot(sourcePath, replacements)
+    const targetSnapshot = await this.createDirectorySnapshot(targetPath)
+
+    if (sourceSnapshot.size !== targetSnapshot.size) {
+      return true
+    }
+
+    for (const [relativePath, sourceContent] of sourceSnapshot) {
+      const targetContent = targetSnapshot.get(relativePath)
+      if (!targetContent || !this.bytesEqual(sourceContent, targetContent)) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  private async createDirectorySnapshot(
+    baseDir: string,
+    replacements?: Record<string, string>,
+  ): Promise<Map<string, Uint8Array>> {
+    const files = new Map<string, Uint8Array>()
+    await this.collectFiles(baseDir, '', files, replacements)
+    return files
+  }
+
+  private async collectFiles(
+    currentDir: string,
+    prefix: string,
+    files: Map<string, Uint8Array>,
+    replacements?: Record<string, string>,
+  ): Promise<void> {
+    for await (const entry of Deno.readDir(currentDir)) {
+      const relativePath = prefix.length > 0 ? `${prefix}/${entry.name}` : entry.name
+      const entryPath = join(currentDir, entry.name)
+
+      if (entry.isDirectory) {
+        await this.collectFiles(entryPath, relativePath, files, replacements)
+      } else if (entry.isFile) {
+        files.set(relativePath, await this.readFileWithReplacements(entryPath, replacements))
+      }
+    }
+  }
+
+  private async readFileWithReplacements(
+    sourcePath: string,
+    replacements?: Record<string, string>,
+  ): Promise<Uint8Array> {
+    if (replacements && this.shouldTransformFile(sourcePath)) {
+      const content = await Deno.readTextFile(sourcePath)
+      const updatedContent = this.applyReplacements(content, replacements)
+      return new TextEncoder().encode(updatedContent)
+    }
+
+    return await Deno.readFile(sourcePath)
+  }
+
+  private bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+    if (a.length !== b.length) {
+      return false
+    }
+
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) {
+        return false
+      }
+    }
+
+    return true
   }
 
   private async copyDirectory(source: string, target: string, options?: SyncSkillsOptions): Promise<void> {
@@ -515,9 +711,7 @@ export class Installer {
     return rendered.trimEnd()
   }
 
-  async checkForUpdates(): Promise<
-    { hasUpdate: boolean; latestVersion: string; currentVersion: string; changelogDiff?: string } | null
-  > {
+  async checkForUpdates(): Promise<UpdateCheckResult | null> {
     try {
       const repoPath = await this.resolveGitRepository()
       if (!repoPath) {
@@ -542,18 +736,6 @@ export class Installer {
       // Determine remote branch (try main first, fall back to master)
       const remoteBranch = await this.getDefaultRemoteBranch(repoPath)
 
-      // Get current commit hash
-      const currentHashCmd = new Deno.Command('git', {
-        args: ['rev-parse', 'HEAD'],
-        cwd: repoPath,
-        stdout: 'piped',
-      })
-      const currentHashResult = await currentHashCmd.output()
-      if (!currentHashResult.success) {
-        return null
-      }
-      const currentHash = new TextDecoder().decode(currentHashResult.stdout).trim().slice(0, 7)
-
       // Get remote commit hash
       const remoteHashCmd = new Deno.Command('git', {
         args: ['rev-parse', `origin/${remoteBranch}`],
@@ -564,10 +746,10 @@ export class Installer {
       const remoteHashResult = await remoteHashCmd.output()
       if (!remoteHashResult.success) {
         // Remote branch doesn't exist, no update available
-        return { hasUpdate: false, latestVersion: currentHash, currentVersion: currentHash }
+        return {
+          hasUpdate: false,
+        }
       }
-      const remoteHash = new TextDecoder().decode(remoteHashResult.stdout).trim().slice(0, 7)
-
       // Check if remote is ahead
       const revListCmd = new Deno.Command('git', {
         args: ['rev-list', '--count', `HEAD..origin/${remoteBranch}`],
@@ -580,17 +762,11 @@ export class Installer {
       if (revListResult.success) {
         const commitsAhead = parseInt(new TextDecoder().decode(revListResult.stdout).trim())
         const hasUpdate = commitsAhead > 0
-        let changelogDiff: string | undefined
-
-        if (hasUpdate) {
-          changelogDiff = await this.getChangelogDiff(repoPath, remoteBranch)
-        }
+        const changelogUrl = hasUpdate ? await this.buildChangelogUrl(repoPath, remoteBranch) : undefined
 
         return {
           hasUpdate,
-          latestVersion: remoteHash,
-          currentVersion: currentHash,
-          changelogDiff,
+          changelogUrl,
         }
       }
 
@@ -602,35 +778,95 @@ export class Installer {
     }
   }
 
-  private async getChangelogDiff(
-    repoPath: string,
-    remoteBranch: string,
-  ): Promise<string | undefined> {
+  private async getLocalProjectVersion(repoPath: string): Promise<string | undefined> {
     try {
-      const diffCmd = new Deno.Command('git', {
-        args: [
-          'diff',
-          '--color=never',
-          '--unified=5',
-          `HEAD..origin/${remoteBranch}`,
-          '--',
-          'CHANGELOG.md',
-        ],
+      const content = await Deno.readTextFile(join(repoPath, 'deno.json'))
+      return this.extractVersionFromDenoConfig(content)
+    } catch {
+      return undefined
+    }
+  }
+
+  private extractVersionFromDenoConfig(content: string): string | undefined {
+    try {
+      const parsed = JSON.parse(content)
+      const version = typeof parsed?.version === 'string' ? parsed.version.trim() : ''
+      return version.length > 0 ? version : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  async getInstalledRecipesVersion(): Promise<string | undefined> {
+    const repoPath = await this.resolveGitRepository()
+    if (repoPath) {
+      const version = await this.getLocalProjectVersion(repoPath)
+      if (version) {
+        return version
+      }
+    }
+
+    await this.stateManager.load()
+    return this.stateManager.getRecipesVersion() ?? undefined
+  }
+
+  async recordInstalledRecipesVersion(version?: string): Promise<void> {
+    await this.stateManager.load()
+    this.stateManager.setRecipesVersion(version ?? null)
+    await this.stateManager.save()
+  }
+
+  private async buildChangelogUrl(repoPath: string, branch: string): Promise<string | undefined> {
+    const remoteUrl = await this.getRemoteUrl(repoPath)
+    if (!remoteUrl) return undefined
+    const normalized = this.normalizeRemoteUrl(remoteUrl)
+    if (!normalized) return undefined
+    return `${normalized}/blob/${branch}/CHANGELOG.md`
+  }
+
+  private async getRemoteUrl(repoPath: string): Promise<string | undefined> {
+    try {
+      const cmd = new Deno.Command('git', {
+        args: ['config', '--get', 'remote.origin.url'],
         cwd: repoPath,
         stdout: 'piped',
         stderr: 'null',
       })
-
-      const result = await diffCmd.output()
+      const result = await cmd.output()
       if (!result.success) return undefined
-
-      const diffText = new TextDecoder().decode(result.stdout).trim()
-      if (diffText.length === 0) return undefined
-
-      return diffText
+      const value = new TextDecoder().decode(result.stdout).trim()
+      return value.length > 0 ? value : undefined
     } catch {
       return undefined
     }
+  }
+
+  private normalizeRemoteUrl(remoteUrl: string): string | undefined {
+    const stripGit = (url: string): string => url.replace(/\.git$/, '')
+
+    if (remoteUrl.startsWith('git@')) {
+      const match = remoteUrl.match(/^git@([^:]+):(.+)$/)
+      if (!match) return undefined
+      const host = match[1]
+      const path = match[2].replace(/\.git$/, '')
+      return `https://${host}/${path}`
+    }
+
+    if (remoteUrl.startsWith('ssh://')) {
+      try {
+        const parsed = new URL(remoteUrl)
+        const path = parsed.pathname.replace(/^\/+/, '').replace(/\.git$/, '')
+        return `https://${parsed.hostname}/${path}`
+      } catch {
+        return undefined
+      }
+    }
+
+    if (remoteUrl.startsWith('https://') || remoteUrl.startsWith('http://')) {
+      return stripGit(remoteUrl)
+    }
+
+    return undefined
   }
 
   async pullLatestChanges(): Promise<boolean> {
@@ -678,7 +914,129 @@ export class Installer {
     }
   }
 
+  private logVerbose(...args: unknown[]): void {
+    if (this.verbose) {
+      console.log(...args)
+    }
+  }
+
+  /**
+   * Format config changes as a git-style diff
+   */
+  private formatConfigDiff(
+    userConfig: Record<string, unknown>,
+    mergedConfig: Record<string, unknown>,
+    parser: { stringify: (obj: Record<string, unknown>) => string },
+  ): string {
+    const userContent = parser.stringify(userConfig)
+    const mergedContent = parser.stringify(mergedConfig)
+
+    const userLines = userContent.split('\n')
+    const mergedLines = mergedContent.split('\n')
+
+    // ANSI color codes
+    const red = '\x1b[31m'
+    const green = '\x1b[32m'
+    const cyan = '\x1b[36m'
+    const reset = '\x1b[0m'
+    const dim = '\x1b[2m'
+
+    const output: string[] = []
+
+    // Header
+    output.push(`${cyan}@@ Config diff @@${reset}`)
+
+    // Simple line-by-line diff
+    const maxLines = Math.max(userLines.length, mergedLines.length)
+    let lastChangeIndex = -1
+
+    for (let i = 0; i < maxLines; i++) {
+      const userLine = userLines[i] || ''
+      const mergedLine = mergedLines[i] || ''
+
+      if (userLine !== mergedLine) {
+        lastChangeIndex = i
+
+        // Show removed line
+        if (userLine && !mergedLines.includes(userLine)) {
+          output.push(`${red}- ${userLine}${reset}`)
+        }
+
+        // Show added line
+        if (mergedLine && !userLines.includes(mergedLine)) {
+          output.push(`${green}+ ${mergedLine}${reset}`)
+        }
+
+        // Modified line
+        if (userLine && mergedLine && userLines.includes(mergedLine) && mergedLines.includes(userLine)) {
+          output.push(`${dim}  ${mergedLine}${reset}`)
+        }
+      } else if (mergedLine) {
+        // Context line (show a few lines around changes)
+        if (lastChangeIndex >= 0 && i - lastChangeIndex <= 2) {
+          output.push(`${dim}  ${mergedLine}${reset}`)
+        } else if (i < mergedLines.length - 1 && i + 1 < maxLines) {
+          // Check if next line is a change
+          const nextUser = userLines[i + 1] || ''
+          const nextMerged = mergedLines[i + 1] || ''
+          if (nextUser !== nextMerged) {
+            output.push(`${dim}  ${mergedLine}${reset}`)
+          }
+        }
+      }
+    }
+
+    return output.join('\n')
+  }
+
+  /**
+   * Format config changes summary with stats
+   */
+  private formatConfigSummary(changes: ConfigChange[]): string {
+    const counts = {
+      added: changes.filter((c) => c.type === 'added').length,
+      modified: changes.filter((c) => c.type === 'modified').length,
+      removed: changes.filter((c) => c.type === 'removed').length,
+    }
+
+    const summary: string[] = []
+    if (counts.added > 0) summary.push(`${counts.added} added`)
+    if (counts.modified > 0) summary.push(`${counts.modified} modified`)
+    if (counts.removed > 0) summary.push(`${counts.removed} removed`)
+
+    return `${changes.length} change(s): ${summary.join(', ')}`
+  }
+
   private async getDefaultRemoteBranch(repoPath: string): Promise<string> {
+    // Check if a source branch was detected during installation
+    const sourceBranch = Deno.env.get('AGENT_RECIPES_SOURCE_BRANCH')
+    if (sourceBranch) {
+      console.log(`  ℹ Using source branch: ${sourceBranch}`)
+      return sourceBranch
+    }
+
+    try {
+      // Check current branch of the repo
+      const currentBranchCmd = new Deno.Command('git', {
+        args: ['branch', '--show-current'],
+        cwd: repoPath,
+        stdout: 'piped',
+        stderr: 'null',
+      })
+      const currentBranchResult = await currentBranchCmd.output()
+
+      if (currentBranchResult.success) {
+        const currentBranch = new TextDecoder().decode(currentBranchResult.stdout).trim()
+        // If on a non-default branch, use it for updates
+        if (currentBranch && currentBranch !== 'main' && currentBranch !== 'master') {
+          console.log(`  ℹ Using current branch: ${currentBranch}`)
+          return currentBranch
+        }
+      }
+    } catch {
+      // Ignore errors
+    }
+
     try {
       // Try to get default remote branch
       const cmd = new Deno.Command('git', {
@@ -722,5 +1080,314 @@ export class Installer {
 
   getBinPath(): string {
     return this.binPath
+  }
+
+  /**
+   * Check if any configs have pending changes (three-way merge preview)
+   */
+  async hasConfigChanges(tools: string[]): Promise<boolean> {
+    const repoRoot = await this.resolveRepositoryRoot()
+    if (!repoRoot) return false
+
+    await this.stateManager.load()
+
+    for (const tool of tools) {
+      const platformConfig = PLATFORM_CONFIGS[tool]
+      if (!platformConfig || !platformConfig.configFile) continue
+
+      const managedPath = this.getManagedConfigPath(repoRoot, tool)
+      if (!managedPath || !await exists(managedPath)) continue
+
+      const userPath = this.getUserConfigPath(tool)
+      if (!await exists(userPath)) {
+        // Managed config exists but user doesn't have it yet - that's a change
+        return true
+      }
+
+      try {
+        // Parse both configs
+        const parser = ConfigParserFactory.getParser(userPath)
+        const userContent = await Deno.readTextFile(userPath)
+        const managedContent = await Deno.readTextFile(managedPath)
+
+        const userConfig = parser.parse(userContent)
+        const managedConfig = parser.parse(managedContent)
+
+        // Get base config (last synced)
+        const baseConfig = this.stateManager.getLastSyncedConfig(tool, userPath)
+
+        // Perform three-way merge
+        const merged = this.configMerger.threeWayMerge(baseConfig, userConfig, managedConfig)
+
+        // Check if merge result differs from current user config
+        const changes = this.configMerger.calculateChanges(userConfig, merged)
+
+        if (changes.length > 0) return true
+      } catch {
+        // If parsing fails, treat as no changes
+        continue
+      }
+    }
+
+    return false
+  }
+
+  /**
+   * Preview config changes before syncing
+   */
+  async previewConfigChanges(tools: string[]): Promise<void> {
+    const repoRoot = await this.resolveRepositoryRoot()
+    if (!repoRoot) {
+      console.log('  ℹ No repository found, skipping config preview')
+      return
+    }
+
+    await this.stateManager.load()
+
+    let hasAnyChanges = false
+
+    for (const tool of tools) {
+      const platformConfig = PLATFORM_CONFIGS[tool]
+      if (!platformConfig || !platformConfig.configFile) continue
+
+      const managedPath = this.getManagedConfigPath(repoRoot, tool)
+      if (!managedPath || !await exists(managedPath)) continue
+
+      const userPath = this.getUserConfigPath(tool)
+
+      try {
+        const parser = ConfigParserFactory.getParser(userPath)
+
+        // Load configs
+        const managedContent = await Deno.readTextFile(managedPath)
+        const managedConfig = parser.parse(managedContent)
+
+        let userConfig: Record<string, unknown>
+        if (await exists(userPath)) {
+          const userContent = await Deno.readTextFile(userPath)
+          userConfig = parser.parse(userContent)
+        } else {
+          userConfig = {}
+        }
+
+        // Get base config
+        const baseConfig = this.stateManager.getLastSyncedConfig(tool, userPath)
+
+        // Perform three-way merge
+        const merged = this.configMerger.threeWayMerge(
+          baseConfig,
+          userConfig,
+          managedConfig,
+          platformConfig.configMergeStrategy,
+        )
+
+        // Calculate changes
+        const changes = this.configMerger.calculateChanges(userConfig, merged)
+
+        if (changes.length > 0) {
+          if (!hasAnyChanges) {
+            console.log('\n📝 Config changes preview:\n')
+            hasAnyChanges = true
+          }
+
+          // Check if there are user conflicts
+          const hasConflicts = this.configMerger.hasUserConflicts(
+            baseConfig,
+            userConfig,
+            managedConfig,
+            merged,
+          )
+
+          console.log(`  ${platformConfig.name} (${platformConfig.configFile}):`)
+          console.log(`  ${this.formatConfigSummary(changes)}`)
+          if (hasConflicts) {
+            console.log('  ⚠ Warning: Contains conflicts (you modified managed fields)')
+            console.log('  → Sync will prompt for confirmation\n')
+          } else {
+            console.log('  ✓ No conflicts (will auto-apply during sync)\n')
+          }
+          const diff = this.formatConfigDiff(userConfig, merged, parser)
+          console.log(diff)
+          console.log()
+        }
+      } catch (error) {
+        console.error(`  ⚠ Failed to preview ${tool} config: ${(error as Error).message}`)
+      }
+    }
+
+    if (!hasAnyChanges) {
+      console.log('  ✓ No config changes detected')
+    }
+  }
+
+  /**
+   * Sync configs using three-way merge
+   */
+  async syncConfigs(tools: string[], _config: InstallConfig, skipPrompt = false): Promise<void> {
+    const repoRoot = await this.resolveRepositoryRoot()
+    if (!repoRoot) {
+      console.log('  ℹ No repository found, skipping config sync')
+      return
+    }
+
+    await this.stateManager.load()
+
+    let hasAnyChanges = false
+
+    // First check if there are any changes
+    for (const tool of tools) {
+      const platformConfig = PLATFORM_CONFIGS[tool]
+      if (!platformConfig || !platformConfig.configFile) continue
+
+      const managedPath = this.getManagedConfigPath(repoRoot, tool)
+      if (!managedPath || !await exists(managedPath)) continue
+
+      hasAnyChanges = true
+      break
+    }
+
+    if (!hasAnyChanges) {
+      return
+    }
+
+    console.log('\n📝 Syncing configs...\n')
+
+    for (const tool of tools) {
+      const platformConfig = PLATFORM_CONFIGS[tool]
+      if (!platformConfig || !platformConfig.configFile) continue
+
+      const managedPath = this.getManagedConfigPath(repoRoot, tool)
+      if (!managedPath || !await exists(managedPath)) {
+        console.log(`  ℹ  No managed config for ${platformConfig.name}, skipping`)
+        continue
+      }
+
+      const userPath = this.getUserConfigPath(tool)
+
+      try {
+        const parser = ConfigParserFactory.getParser(userPath)
+
+        // Load managed config
+        const managedContent = await Deno.readTextFile(managedPath)
+        const managedConfig = parser.parse(managedContent)
+
+        // Load user config (or empty if doesn't exist)
+        let userConfig: Record<string, unknown>
+        if (await exists(userPath)) {
+          const userContent = await Deno.readTextFile(userPath)
+          userConfig = parser.parse(userContent)
+        } else {
+          userConfig = {}
+        }
+
+        // Get base config (last synced)
+        const baseConfig = this.stateManager.getLastSyncedConfig(tool, userPath)
+
+        // Perform three-way merge
+        const merged = this.configMerger.threeWayMerge(
+          baseConfig,
+          userConfig,
+          managedConfig,
+          platformConfig.configMergeStrategy,
+        )
+
+        // Check if there are actual changes
+        const changes = this.configMerger.calculateChanges(userConfig, merged)
+
+        // DEBUG: Show what we're comparing
+        if (this.verbose) {
+          console.log(`\n  DEBUG ${platformConfig.name}:`)
+          console.log('  Base keys:', baseConfig ? Object.keys(baseConfig).join(', ') : 'null')
+          console.log('  User keys:', Object.keys(userConfig).join(', '))
+          console.log('  Managed keys:', Object.keys(managedConfig).join(', '))
+          console.log('  Merged keys:', Object.keys(merged).join(', '))
+          console.log('  Changes:', changes.length)
+          if (changes.length > 0 && changes.length < 20) {
+            changes.forEach((c) => console.log(`    - ${c.type}: ${c.path}`))
+          }
+        }
+
+        if (changes.length === 0) {
+          console.log(`  ✓ ${platformConfig.name}: No changes`)
+          continue
+        }
+
+        // Check if there are user conflicts (user modified managed fields)
+        const hasConflicts = this.configMerger.hasUserConflicts(
+          baseConfig,
+          userConfig,
+          managedConfig,
+          merged,
+        )
+
+        // Determine if we need user confirmation
+        const needsConfirmation = !skipPrompt && hasConflicts
+
+        if (needsConfirmation) {
+          // User modified managed fields - show diff and ask for confirmation
+          console.log(`\n  ${platformConfig.name} (${platformConfig.configFile}):`)
+          console.log(`  ${this.formatConfigSummary(changes)}\n`)
+          const diff = this.formatConfigDiff(userConfig, merged, parser)
+          console.log(diff)
+          console.log('\n  ⚠ Warning: You modified fields that are managed by agent-recipes.')
+          console.log('  Your changes will be overwritten if you proceed.\n')
+
+          const confirm = await Confirm.prompt({
+            message: `Apply managed config and overwrite your changes?`,
+            default: false,
+          })
+
+          if (!confirm) {
+            console.log(`  ⊘  Skipped ${platformConfig.name} config (keeping your changes)`)
+            continue
+          }
+        }
+
+        // Apply changes
+        const mergedContent = parser.stringify(merged)
+        await Deno.mkdir(dirname(userPath), { recursive: true })
+        await Deno.writeTextFile(userPath, mergedContent)
+
+        // Update state - store only managed config, not merged!
+        // This way next sync knows what WE added, not what the user had
+        this.stateManager.setLastSyncedConfig(tool, userPath, managedConfig)
+
+        // Log success
+        if (skipPrompt) {
+          console.log(`  ✓ ${platformConfig.name}: Applied ${changes.length} change(s) (--yes)`)
+        } else if (hasConflicts) {
+          console.log(`  ✓ ${platformConfig.name}: Applied changes (conflicts resolved)`)
+        } else {
+          console.log(`  ✓ ${platformConfig.name}: Auto-applied ${changes.length} change(s)`)
+        }
+      } catch (error) {
+        console.error(`  ⚠ Failed to sync ${tool} config: ${(error as Error).message}`)
+      }
+    }
+
+    // Save state
+    await this.stateManager.save()
+  }
+
+  /**
+   * Get path to managed config in repo
+   */
+  private getManagedConfigPath(repoRoot: string, tool: string): string | null {
+    const platformConfig = PLATFORM_CONFIGS[tool]
+    if (!platformConfig || !platformConfig.configFile) return null
+
+    return join(repoRoot, 'instructions', tool, platformConfig.configFile)
+  }
+
+  /**
+   * Get path to user config
+   */
+  private getUserConfigPath(tool: string): string {
+    const platformConfig = PLATFORM_CONFIGS[tool]
+    if (!platformConfig || !platformConfig.configFile) {
+      throw new Error(`No config file defined for platform: ${tool}`)
+    }
+
+    return join(this.homeDir, platformConfig.dir, platformConfig.configFile)
   }
 }
