@@ -13,8 +13,10 @@ new Command()
   .option('--dry-run', 'Print mutations without executing them')
   .option('--no-git-check', 'Skip git branch/clean checks')
   .option('--skip-tests', 'Skip fmt/lint/test verification')
+  .option('-y, --yes', 'Skip confirmation prompts')
+  .option('--no-edit', 'Skip interactive changelog editing')
   .arguments('[version:string]')
-  .action(async ({ dryRun, gitCheck, skipTests }, versionArg?: string) => {
+  .action(async ({ dryRun, gitCheck, skipTests, yes, edit }, versionArg?: string) => {
     if (!skipTests) {
       await runCommand(['deno', 'fmt'])
       await runCommand(['deno', 'fmt', '--check'])
@@ -33,8 +35,8 @@ new Command()
     if (gitCheck) {
       const status = (await runText(['git', 'status', '--porcelain'])).trim()
       if (status.length > 0) {
-        console.error('Working tree is dirty. Commit or stash changes first.')
-        console.error(status)
+        console.warn('⚠️  Working tree has uncommitted changes. Commit or stash changes first')
+        console.warn(status)
         Deno.exit(1)
       }
     }
@@ -42,20 +44,28 @@ new Command()
     const currentVersion = parseVersion(denoConfig.version)
     const targetVersion = versionArg ? parseVersion(versionArg) : await chooseNextVersion(currentVersion)
 
-    const confirmed = await Confirm.prompt({
-      message: `Release ${format(currentVersion)} → ${format(targetVersion)}?`,
-      default: true,
-    })
-    if (!confirmed) {
-      console.log('Aborted')
-      Deno.exit(0)
+    if (!yes) {
+      const confirmed = await Confirm.prompt({
+        message: `Release ${format(currentVersion)} → ${format(targetVersion)}?`,
+        default: true,
+      })
+      if (!confirmed) {
+        console.log('Aborted')
+        Deno.exit(0)
+      }
+    } else {
+      console.log(`Release ${format(currentVersion)} → ${format(targetVersion)}`)
     }
 
     await updateDenoJson(format(targetVersion), dryRun)
-    const notes = await updateChangelog({
-      currentVersion: denoConfig.version,
-      nextVersion: format(targetVersion),
-    }, dryRun)
+    const notes = await updateChangelog(
+      {
+        currentVersion: denoConfig.version,
+        nextVersion: format(targetVersion),
+      },
+      dryRun,
+      edit,
+    )
     await runCommand(['deno', 'fmt', 'CHANGELOG.md'])
 
     if (onMain) {
@@ -102,6 +112,7 @@ async function updateDenoJson(newVersion: string, dryRun: boolean) {
 async function updateChangelog(
   { currentVersion, nextVersion }: { currentVersion: string; nextVersion: string },
   dryRun: boolean,
+  edit: boolean,
 ) {
   const changes = await collectCommitMessages(currentVersion)
   if (!changes) {
@@ -109,7 +120,7 @@ async function updateChangelog(
     return ''
   }
 
-  const edited = await editInEditor(changes)
+  const edited = edit ? await editInEditor(changes) : changes
   const trimmed = edited.trim() || '- Internal maintenance'
 
   const changelog = await readChangelog()
@@ -150,11 +161,26 @@ async function editInEditor(initial: string) {
 
   const editor = Deno.env.get('EDITOR') || 'nano'
   const [cmd, ...args] = editor.split(' ')
+
+  console.log(`\n▶ Opening editor: ${editor}`)
+  console.log(`  Editing: ${filePath}`)
+  console.log(`  Press Ctrl+X (nano) or :wq (vim) to save and exit\n`)
+
   try {
-    await runCommand([cmd, ...args, filePath])
-    return await Deno.readTextFile(filePath)
+    // Use runInteractive for editors that need terminal access
+    await runInteractive([cmd, ...args, filePath])
+    const edited = await Deno.readTextFile(filePath)
+
+    // Clean up temp file
+    try {
+      await Deno.remove(tempDir, { recursive: true })
+    } catch {
+      // Ignore cleanup errors
+    }
+
+    return edited
   } catch (error) {
-    console.warn(`Editor failed (${editor}): ${error}`)
+    console.warn(`\n⚠️  Editor failed (${editor}): ${error}`)
     console.warn('Using generated notes instead.')
     return initial
   }
@@ -202,6 +228,21 @@ async function runCommand(cmd: string[], options: { allowFail?: boolean } = {}) 
   if (err) console.error(err.trimEnd())
   if (!result.success && !options.allowFail) {
     throw new Error(`Command "${cmd.join(' ')}" failed${err ? `: ${err}` : ''}`)
+  }
+  return result
+}
+
+async function runInteractive(cmd: string[]) {
+  // For interactive commands (editors, prompts), inherit stdio to allow terminal interaction
+  const command = new Deno.Command(cmd[0], {
+    args: cmd.slice(1),
+    stdin: 'inherit',
+    stdout: 'inherit',
+    stderr: 'inherit',
+  })
+  const result = await command.output()
+  if (!result.success) {
+    throw new Error(`Command "${cmd.join(' ')}" failed with exit code ${result.code}`)
   }
   return result
 }
