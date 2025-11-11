@@ -39,6 +39,11 @@
     "singleQuote": true
   },
   "lint": {
+    "files": {
+      "exclude": [
+        "skills/**"
+      ]
+    },
     "rules": {
       "tags": [
         "recommended"
