@@ -1,3 +1,5 @@
 <%= it.agents %>
 
 <%= it.skillsSection %>
+
+<%= it.agentsSection %>

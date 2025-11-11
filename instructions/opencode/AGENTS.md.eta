@@ -1,3 +1,7 @@
 <%= it.agents %>
 
 <%= it.skillsSection %>
+
+<%= it.agentsSection %>
+
+**Note**: Agents and commands are configured in `~/.config/opencode/opencode.json` under the `agent` and `command` sections.

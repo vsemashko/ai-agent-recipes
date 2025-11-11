@@ -2,7 +2,7 @@ import { exists } from '@std/fs'
 import { dirname, join } from '@std/path'
 import { Confirm } from '@cliffy/prompt'
 import { Eta } from 'eta'
-import { batchConvertSkills } from './converter.ts'
+import { batchConvertAgents, batchConvertCommands, batchConvertSkills } from './converter.ts'
 import { ConfigParserFactory } from './config-format.ts'
 import { type ConfigChange, ConfigMerger } from './config-merger.ts'
 import { StateManager } from './state-manager.ts'
@@ -34,6 +34,8 @@ interface PlatformSyncSummary {
   name: string
   fileChanges: ManagedFileChange[]
   skillUpdates: number
+  agentUpdates: number
+  commandUpdates: number
 }
 
 interface SyncSkillsOptions {
@@ -281,7 +283,12 @@ export class Installer {
       }
     }
 
-    const changedPlatforms = summaries.filter((summary) => summary.fileChanges.length > 0 || summary.skillUpdates > 0)
+    const changedPlatforms = summaries.filter((summary) =>
+      summary.fileChanges.length > 0 ||
+      summary.skillUpdates > 0 ||
+      summary.agentUpdates > 0 ||
+      summary.commandUpdates > 0
+    )
 
     if (changedPlatforms.length > 0) {
       console.log('📝 Instructions updated:')
@@ -298,6 +305,16 @@ export class Installer {
         if (summary.skillUpdates > 0) {
           const label = summary.skillUpdates === 1 ? 'skill' : 'skills'
           parts.push(`synced ${summary.skillUpdates} managed ${label}`)
+        }
+
+        if (summary.agentUpdates > 0) {
+          const label = summary.agentUpdates === 1 ? 'agent' : 'agents'
+          parts.push(`synced ${summary.agentUpdates} ${label}`)
+        }
+
+        if (summary.commandUpdates > 0) {
+          const label = summary.commandUpdates === 1 ? 'command' : 'commands'
+          parts.push(`synced ${summary.commandUpdates} ${label}`)
         }
 
         console.log(`  • ${summary.name}: ${parts.join('; ')}`)
@@ -326,6 +343,8 @@ export class Installer {
       name: config.name,
       fileChanges: [],
       skillUpdates: 0,
+      agentUpdates: 0,
+      commandUpdates: 0,
     }
 
     // Build template data
@@ -349,6 +368,43 @@ export class Installer {
       const skillsTemplatePath = join(repoRoot, 'instructions', 'common', 'skills.eta')
       data.skillsSection = await this.renderTemplate(skillsTemplatePath, { skillsList })
       this.logVerbose(`  ✓ Generated skills list with ${results.length} skill(s)`)
+    }
+
+    // Add agents if needed (convert & embed in templates or sync as files)
+    data.agentsSection = '' // Default to empty string
+    if (config.agentsFormat) {
+      const agentsDir = join(repoRoot, 'agents')
+      const results = await batchConvertAgents(
+        agentsDir,
+        config.agentsFormat,
+        (agentDir) => `~/${config.dir}/agents/${this.getManagedSkillDirName(agentDir)}/AGENT.md`,
+      )
+
+      // For agent-md format (Codex), create a list for templates
+      if (config.agentsFormat === 'agent-md') {
+        const agentsList = results.map((r) => r.output).join('\n').trim()
+        data.agentsList = agentsList
+
+        // Render agents section template if it exists
+        const agentsTemplatePath = join(repoRoot, 'instructions', 'common', 'agents.eta')
+        if (await exists(agentsTemplatePath)) {
+          data.agentsSection = await this.renderTemplate(agentsTemplatePath, { agentsList })
+          this.logVerbose(`  ✓ Generated agents list with ${results.length} agent(s)`)
+        }
+      } else {
+        // For claude-md format, we'll sync agent files separately
+        data.agentsList = results
+      }
+    }
+
+    // Add commands if needed (convert for templates)
+    data.commandsSection = '' // Default to empty string
+    if (config.commandsFormat) {
+      const commandsDir = join(repoRoot, 'commands')
+      const results = await batchConvertCommands(commandsDir, config.commandsFormat)
+      data.commandsList = results
+
+      this.logVerbose(`  ✓ Processed ${results.length} command(s)`)
     }
 
     // Find and process all .eta templates in the platform directory
@@ -387,6 +443,38 @@ export class Installer {
       summary.skillUpdates = await this.syncSkills(skillsSource, skillsTarget, {
         pathReplacements: config.pathReplacements,
       })
+    }
+
+    // Sync agents
+    if (config.agentsFormat && config.agentsDir) {
+      const agentsSource = join(repoRoot, 'agents')
+      if (await exists(agentsSource)) {
+        const agentsTarget = join(targetDir, config.agentsDir)
+        summary.agentUpdates = await this.syncAgents(
+          agentsSource,
+          agentsTarget,
+          config.agentsFormat,
+          platformKey,
+        )
+      }
+    }
+
+    // Sync commands
+    if (config.commandsFormat && config.commandsDir) {
+      const commandsSource = join(repoRoot, 'commands')
+      if (await exists(commandsSource)) {
+        const commandsTarget = join(targetDir, config.commandsDir)
+        summary.commandUpdates = await this.syncCommands(
+          commandsSource,
+          commandsTarget,
+          config.commandsFormat,
+        )
+      }
+    }
+
+    // Merge agents/commands into config file for OpenCode
+    if (platformKey === 'opencode' && config.configFile) {
+      await this.mergeOpenCodeAgentsAndCommands(targetDir, config.configFile, data)
     }
 
     return summary
@@ -535,6 +623,139 @@ export class Installer {
     }
 
     return trackedUpdated
+  }
+
+  /**
+   * Sync agents to user directory
+   */
+  private async syncAgents(
+    sourceDir: string,
+    targetDir: string,
+    format: 'claude-md' | 'opencode-json' | 'agent-md',
+    platformKey: string,
+  ): Promise<number> {
+    await Deno.mkdir(targetDir, { recursive: true })
+
+    // For Claude Code format, write individual .md files
+    if (format === 'claude-md') {
+      const results = await batchConvertAgents(sourceDir, format)
+
+      // Cleanup managed agents (sa- prefix)
+      try {
+        for await (const entry of Deno.readDir(targetDir)) {
+          if (entry.isFile && entry.name.endsWith('.md')) {
+            // Check if this is a managed agent by seeing if it came from sa- source
+            const agentName = entry.name.replace('.md', '')
+            const sourceMatch = results.some((r) => r.agent.startsWith('sa-') && r.agent.replace('sa-', '') === agentName)
+            if (sourceMatch || entry.name.startsWith('sa-')) {
+              await Deno.remove(join(targetDir, entry.name))
+            }
+          }
+        }
+      } catch (err) {
+        this.logVerbose(`  ⚠ Agent cleanup skipped: ${(err as Error).message}`)
+      }
+
+      // Write new agent files
+      for (const { agent, output } of results) {
+        const agentName = agent.startsWith('sa-') ? agent.replace('sa-', '') : agent
+        const targetPath = join(targetDir, `${agentName}.md`)
+        await Deno.writeTextFile(targetPath, output as string)
+        this.logVerbose(`  ✓ Wrote agent: ${agentName}.md`)
+      }
+
+      return results.length
+    }
+
+    // For other formats (agent-md, opencode-json), handled elsewhere
+    return 0
+  }
+
+  /**
+   * Sync commands to user directory
+   */
+  private async syncCommands(
+    sourceDir: string,
+    targetDir: string,
+    format: 'claude-md' | 'opencode-json',
+  ): Promise<number> {
+    await Deno.mkdir(targetDir, { recursive: true })
+
+    const results = await batchConvertCommands(sourceDir, format)
+
+    // For both formats, write .md files
+    // (OpenCode also reads from command/ directory, not just config)
+
+    // Cleanup managed commands (sa- prefix)
+    try {
+      for await (const entry of Deno.readDir(targetDir)) {
+        if (entry.isFile && entry.name.endsWith('.md')) {
+          const commandName = entry.name.replace('.md', '')
+          const sourceMatch = results.some((r) => r.command.startsWith('sa-') && r.command.replace('sa-', '') === commandName)
+          if (sourceMatch || entry.name.startsWith('sa-')) {
+            await Deno.remove(join(targetDir, entry.name))
+          }
+        }
+      }
+    } catch (err) {
+      this.logVerbose(`  ⚠ Command cleanup skipped: ${(err as Error).message}`)
+    }
+
+    // Write command files
+    for (const { command, output } of results) {
+      const commandName = command.startsWith('sa-') ? command.replace('sa-', '') : command
+      const targetPath = join(targetDir, `${commandName}.md`)
+      const content = typeof output === 'string' ? output : (output as Record<string, unknown>).template as string
+      await Deno.writeTextFile(targetPath, content)
+      this.logVerbose(`  ✓ Wrote command: ${commandName}.md`)
+    }
+
+    return results.length
+  }
+
+  /**
+   * Merge agents and commands into OpenCode config.json
+   */
+  private async mergeOpenCodeAgentsAndCommands(
+    targetDir: string,
+    configFileName: string,
+    data: Record<string, unknown>,
+  ): Promise<void> {
+    const configPath = join(targetDir, configFileName)
+
+    // Load existing config or create new one
+    let config: Record<string, unknown> = {}
+    if (await exists(configPath)) {
+      try {
+        const content = await Deno.readTextFile(configPath)
+        config = JSON.parse(content)
+      } catch (err) {
+        this.logVerbose(`  ⚠ Could not parse existing config: ${(err as Error).message}`)
+      }
+    }
+
+    // Add agents section
+    if (data.agentsList && Array.isArray(data.agentsList)) {
+      if (!config.agent) config.agent = {}
+      for (const { agent, output } of data.agentsList as Array<{ agent: string; output: object }>) {
+        const agentName = agent.startsWith('sa-') ? agent.replace('sa-', '') : agent
+        (config.agent as Record<string, unknown>)[agentName] = output
+        this.logVerbose(`  ✓ Added agent to config: ${agentName}`)
+      }
+    }
+
+    // Add commands section
+    if (data.commandsList && Array.isArray(data.commandsList)) {
+      if (!config.command) config.command = {}
+      for (const { command, output } of data.commandsList as Array<{ command: string; output: object }>) {
+        const commandName = command.startsWith('sa-') ? command.replace('sa-', '') : command
+        (config.command as Record<string, unknown>)[commandName] = output
+        this.logVerbose(`  ✓ Added command to config: ${commandName}`)
+      }
+    }
+
+    // Write updated config
+    await Deno.writeTextFile(configPath, JSON.stringify(config, null, 2) + '\n')
   }
 
   private async skillNeedsUpdate(

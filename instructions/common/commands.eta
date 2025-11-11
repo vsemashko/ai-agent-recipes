@@ -1,0 +1,9 @@
+<% if (commandsList && commandsList.length > 0) { %>
+## Available Commands
+
+The following slash commands are available:
+
+<% commandsList.forEach(cmd => { %>
+- **/<%= cmd.command.replace('sa-', '') %>** - <%= cmd.description || 'Custom command' %>
+<% }) %>
+<% } %>

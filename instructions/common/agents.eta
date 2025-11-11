@@ -1,0 +1,7 @@
+<% if (agentsList && agentsList.trim().length > 0) { %>
+## Available Agents
+
+The following specialized agents are available for invocation:
+
+<%= agentsList %>
+<% } %>
