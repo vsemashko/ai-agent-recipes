@@ -15,7 +15,7 @@ You've got skills.
 ### Examples
 
 **Task: "Check if service is rightsized"**
-→ Match: - **rightsize** (`<path>/skills/sa_rightsize/SKILL.md`) - Check if the Kubernetes deployment resources for the service match the RightSize API recommendations, and update the configurations if they don't
+→ Match: - **rightsize** (`<path>/skills/sa-rightsize/SKILL.md`) - Check if the Kubernetes deployment resources for the service match the RightSize API recommendations, and update the configurations if they don't
 → Action: Read the rightsize SKILL.md and follow its instructions
 
 ### Important Notes

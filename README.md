@@ -106,7 +106,7 @@ agent-recipes sync
 ### For Claude Code Users
 
 - Global instructions → `~/.claude/CLAUDE.md`
-- Skills directory → `~/.claude/skills/` (managed copies with `sa_` prefix)
+- Skills directory → `~/.claude/skills/` (managed copies with `sa-` prefix)
 
 ### For Codex CLI Users
 
@@ -164,14 +164,14 @@ See `instructions/README.md` for detailed template documentation.
 
 ### Custom Skills
 
-Skills with the `sa_` prefix are managed by agent-recipes. To add custom skills:
+Skills with the `sa-` prefix are managed by agent-recipes. To add custom skills:
 
 **Option 1: Add alongside (recommended)**
 
 ```bash
 ~/.claude/skills/
-├── sa_rightsize/        # Managed - updated on sync
-├── sa_commit-message/   # Managed - updated on sync
+├── sa-rightsize/        # Managed - updated on sync
+├── sa-commit-message/   # Managed - updated on sync
 ├── my-custom-skill/     # Yours - never touched!
 └── db-migration/        # Yours - never touched!
 ```
@@ -179,8 +179,8 @@ Skills with the `sa_` prefix are managed by agent-recipes. To add custom skills:
 **Option 2: Customize a managed skill**
 
 ```bash
-# Copy and remove sa_ prefix
-cp -r ~/.claude/skills/sa_rightsize ~/.claude/skills/rightsize
+# Copy and remove sa- prefix
+cp -r ~/.claude/skills/sa-rightsize ~/.claude/skills/rightsize
 
 # Now edit rightsize/ - it's yours!
 # Note: You won't get automatic updates for this skill
@@ -212,7 +212,7 @@ Quick overview:
 - When running from a feature branch, review and commit `deno.json` + `CHANGELOG.md` as part of your merge request, then tag the release on `main`
   once merged.
 
-2. Add your skill in `skills/sa_my-skill/SKILL.md` (keep the `name` field without the prefix)
+2. Add your skill in `skills/sa-my-skill/SKILL.md` (keep the `name` field without the prefix)
 3. Test with `agent-recipes sync`
 4. Submit a merge request
 

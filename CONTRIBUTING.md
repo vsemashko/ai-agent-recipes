@@ -48,7 +48,7 @@ stashaway-agent-recipes/
 ├── cli/
 │   ├── commands/            # sync.ts, list.ts, convert.ts, info.ts
 │   └── lib/                 # installer.ts, converter.ts
-├── skills/                  # Skill definitions (sa_ prefix)
+├── skills/                  # Skill definitions (sa- prefix)
 ├── instructions/            # Platform templates (Eta)
 │   ├── GLOBAL_INSTRUCTIONS.md            # Global guidance (shared)
 │   ├── common/
@@ -67,10 +67,10 @@ See [CLAUDE.md](./CLAUDE.md) for detailed architecture and technology stack info
 ### 1. Create Skill
 
 ```bash
-mkdir skills/sa_my-skill
+mkdir skills/sa-my-skill
 ```
 
-**Note**: Managed skills use `sa_` prefix in directory, but `name` in frontmatter omits it.
+**Note**: Managed skills use `sa-` prefix in directory, but `name` in frontmatter omits it.
 
 ### 2. Create SKILL.md
 
@@ -114,7 +114,7 @@ agent-recipes list       # Verify skill appears
 ### 4. Verify Conversion
 
 ```bash
-agent-recipes convert skills/sa_my-skill/SKILL.md --format agent-md
+agent-recipes convert skills/sa-my-skill/SKILL.md --format agent-md
 ```
 
 ### Best Practices
@@ -208,7 +208,7 @@ Examples:
 
 ### 2. Commit Messages
 
-Use **sa_commit-message** skill or follow format:
+Use **sa-commit-message** skill or follow format:
 
 ```
 <type>: <ticket> <subject>

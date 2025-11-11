@@ -4,8 +4,9 @@ import { Confirm } from '@cliffy/prompt'
 import { Eta } from 'eta'
 import { batchConvertSkills } from './converter.ts'
 import { ConfigParserFactory } from './config-format.ts'
-import { type ConfigChange, ConfigMerger, type MergeStrategy } from './config-merger.ts'
+import { type ConfigChange, ConfigMerger } from './config-merger.ts'
 import { StateManager } from './state-manager.ts'
+import { PLATFORM_CONFIGS } from './platform-config.ts'
 
 export interface InstallConfig {
   version: string
@@ -13,44 +14,6 @@ export interface InstallConfig {
   lastUpdateCheck: string
   installPath: string
   customPaths?: Record<string, string>
-}
-
-interface PlatformConfig {
-  name: string
-  dir: string
-  skillsFormat?: 'agent-md' // If set, convert & embed skills in templates with this format
-  pathReplacements?: Record<string, string>
-  configFile?: string // Config filename (same in both user dir and repo)
-  configMergeStrategy?: MergeStrategy[] // Custom merge strategy for this platform's config
-}
-
-const PLATFORM_CONFIGS: Record<string, PlatformConfig> = {
-  'claude': {
-    name: 'Claude Code',
-    dir: '.claude',
-    // No skillsFormat = skills copied as-is to separate directory (no conversion, no embedding)
-    configFile: 'config.json',
-  },
-
-  'codex': {
-    name: 'Codex',
-    dir: '.codex',
-    skillsFormat: 'agent-md', // Convert & embed skills in templates
-    pathReplacements: {
-      '~/.claude': '~/.codex',
-    },
-    configFile: 'config.toml',
-  },
-
-  'opencode': {
-    name: 'OpenCode',
-    dir: '.opencode',
-    skillsFormat: 'agent-md', // Convert & embed skills in templates
-    pathReplacements: {
-      '~/.claude': '~/.opencode',
-    },
-    configFile: 'config.json',
-  },
 }
 
 interface InstallerOptions {
@@ -145,54 +108,44 @@ export class Installer {
     await Deno.writeTextFile(this.configPath, JSON.stringify(config, null, 2))
   }
 
-  async detectAITools(): Promise<string[]> {
-    const tools: string[] = []
-
-    // Check for Claude Code
-    const claudePath = join(this.homeDir, '.claude')
-    if (await exists(claudePath)) {
-      tools.push('claude')
+  async detectAIPlatforms(): Promise<string[]> {
+    const detected: string[] = []
+    for (const [key, cfg] of Object.entries(PLATFORM_CONFIGS)) {
+      const dir = cfg.dir?.trim()
+      if (!dir) continue
+      try {
+        const absPath = join(this.homeDir, dir)
+        if (await exists(absPath)) detected.push(key)
+      } catch {
+        // ignore invalid entries
+      }
     }
-
-    // Check for Codex
-    const codexPath = join(this.homeDir, '.codex')
-    if (await exists(codexPath)) {
-      tools.push('codex')
-    }
-
-    // Check for OpenCode
-    const opencodePath = join(this.homeDir, '.opencode')
-    if (await exists(opencodePath)) {
-      tools.push('opencode')
-    }
-
-    return tools
+    return detected
   }
 
   async promptForTools(): Promise<string[]> {
     console.log('📦 Setting up StashAway Agent Recipes...\n')
 
-    const detectedTools = await this.detectAITools()
+    const detectedTools = await this.detectAIPlatforms()
 
     if (detectedTools.length > 0) {
-      console.log(`✓ Detected AI tools: ${detectedTools.join(', ')}\n`)
+      console.log(`✓ Detected AI platforms: ${detectedTools.join(', ')}\n`)
       const useDetected = await Confirm.prompt({
-        message: 'Would you like to set up instructions for these tools?',
+        message: 'Would you like to set up instructions for these platforms?',
         default: true,
       })
 
       if (useDetected) return detectedTools
     }
 
-    console.log('\nWhich AI coding tools do you use? (select all that apply)\n')
+    console.log('\nWhich AI coding platforms do you use? (select all that apply)\n')
 
     const selectedTools: string[] = []
 
-    const tools = [
-      { name: 'Claude Code', value: 'claude' },
-      { name: 'Codex CLI', value: 'codex' },
-      { name: 'OpenCode', value: 'opencode' },
-    ]
+    const tools = Object.entries(PLATFORM_CONFIGS).map(([key, cfg]) => ({
+      name: cfg.name,
+      value: key,
+    }))
 
     for (const tool of tools) {
       const use = await Confirm.prompt({
@@ -301,7 +254,7 @@ export class Installer {
       }
     }
 
-    const detectedTools = await this.detectAITools()
+    const detectedTools = await this.detectAIPlatforms()
     const newlyDetected: string[] = []
     for (const tool of detectedTools) {
       if (!installedTools.includes(tool)) {
@@ -311,7 +264,7 @@ export class Installer {
     }
 
     if (newlyDetected.length > 0) {
-      const label = newlyDetected.length === 1 ? 'tool' : 'tools'
+      const label = newlyDetected.length === 1 ? 'platform' : 'platforms'
       console.log(
         `  ✓ Detected new ${label}: ${newlyDetected.join(', ')} (auto-added to sync list)`,
       )
@@ -509,7 +462,7 @@ export class Installer {
   }
 
   /**
-   * Sync skills ensuring managed copies use sa_ prefix (always replace our managed skills)
+   * Sync skills ensuring managed copies use sa- prefix (always replace our managed skills)
    */
   private async syncSkills(
     sourceDir: string,
@@ -528,36 +481,51 @@ export class Installer {
       }
     }
 
-    let updatedSkills = 0
-
-    // Sync each repo skill directory (managed copies keep sa_ prefix)
+    // Track which skills need update before cleanup (for reporting purposes)
+    let trackedUpdated = 0
+    const needsUpdateMap = new Map<string, boolean>()
     for (const { dirName, targetName } of repoSkills) {
       const sourcePath = join(sourceDir, dirName)
       const targetPath = join(targetDir, targetName)
-
-      const needsUpdate = await this.skillNeedsUpdate(
-        sourcePath,
-        targetPath,
-        options?.pathReplacements,
-      )
-
+      const needsUpdate = await this.skillNeedsUpdate(sourcePath, targetPath, options?.pathReplacements)
+      needsUpdateMap.set(targetName, needsUpdate)
       if (needsUpdate) {
-        if (await exists(targetPath)) {
-          await Deno.remove(targetPath, { recursive: true })
-        }
-        await this.copyDirectory(sourcePath, targetPath, options)
-        this.logVerbose(`  ✓ Synced skill: ${targetName}`)
-        updatedSkills++
-        continue
+        this.logVerbose(`  ↻ Will update: ${targetName}`)
+        trackedUpdated++
+      } else {
+        this.logVerbose(`  ↺ Unchanged: ${targetName}`)
       }
-
-      this.logVerbose(`  ↺ Skill already up to date: ${targetName}`)
     }
 
-    // Count user's custom skills (no sa_ prefix)
+    // Cleanup step: remove all previously managed skills (directories starting with "sa-")
+    // AFTER tracking. This guarantees removed/renamed skills are purged.
+    try {
+      let removed = 0
+      for await (const entry of Deno.readDir(targetDir)) {
+        if (entry.isDirectory && entry.name.startsWith('sa-')) {
+          const toRemove = join(targetDir, entry.name)
+          await Deno.remove(toRemove, { recursive: true })
+          removed++
+        }
+      }
+      if (removed > 0) this.logVerbose(`  🧹 Removed ${removed} managed skill(s) before apply`)
+    } catch (err) {
+      // Non-fatal: continue syncing even if cleanup hits a transient error
+      this.logVerbose(`  ⚠ Managed skills cleanup skipped due to error: ${(err as Error).message}`)
+    }
+
+    // Apply: copy all managed skills fresh from the repo
+    for (const { dirName, targetName } of repoSkills) {
+      const sourcePath = join(sourceDir, dirName)
+      const targetPath = join(targetDir, targetName)
+      await this.copyDirectory(sourcePath, targetPath, options)
+      this.logVerbose(`  ✓ Copied skill: ${targetName}`)
+    }
+
+    // Count user's custom skills (no sa- prefix)
     let customCount = 0
     for await (const entry of Deno.readDir(targetDir)) {
-      if (entry.isDirectory && !entry.name.startsWith('sa_')) {
+      if (entry.isDirectory && !entry.name.startsWith('sa-')) {
         customCount++
       }
     }
@@ -566,7 +534,7 @@ export class Installer {
       this.logVerbose(`  ℹ  Preserved ${customCount} custom skill(s)`)
     }
 
-    return updatedSkills
+    return trackedUpdated
   }
 
   private async skillNeedsUpdate(
@@ -665,7 +633,7 @@ export class Installer {
   }
 
   private getManagedSkillDirName(dirName: string): string {
-    return dirName.startsWith('sa_') ? dirName : `sa_${dirName}`
+    return dirName.startsWith('sa-') ? dirName : `sa-${dirName}`
   }
 
   private shouldTransformFile(filePath: string): boolean {

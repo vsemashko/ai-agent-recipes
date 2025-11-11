@@ -55,7 +55,7 @@ Deno.test({
   async fn() {
     await withTempInstaller(async (installer, tempDir) => {
       const sourceSkill = join(tempDir, 'repo-skills', 'demo')
-      const targetSkill = join(tempDir, 'user-skills', 'sa_demo')
+      const targetSkill = join(tempDir, 'user-skills', 'sa-demo')
       await Deno.mkdir(sourceSkill, { recursive: true })
       await Deno.mkdir(targetSkill, { recursive: true })
 

@@ -20,9 +20,9 @@
   - Improve release process
 - feat: Add branch-name skill and update commit-message guidelines
 -
-  - Add new sa_branch-name skill for generating and validating git branch names
+  - Add new sa-branch-name skill for generating and validating git branch names
 -
-  - Update sa_commit-message skill to prohibit AI attribution footers
+  - Update sa-commit-message skill to prohibit AI attribution footers
 -
   - Extract branch naming conventions from commit-message skill for focused guidance
 - Merge branch 'feat/improve-templates' into 'main'
@@ -72,8 +72,8 @@ Highlights:
 - Deno-based CLI with commands to list, inspect, sync, and convert recipes (see README for usage).
 - Config utilities with safe merging for JSONC/TOML/YAML, plus tests.
 - Skills catalog:
-  - sa_commit-message — enforce conventional commits and block AI attribution footers.
-  - sa_branch-name — generate and validate Git branch names from issue IDs/titles.
-  - sa_rightsize — guidance/tooling for right‑sizing tasks.
+  - sa-commit-message — enforce conventional commits and block AI attribution footers.
+  - sa-branch-name — generate and validate Git branch names from issue IDs/titles.
+  - sa-rightsize — guidance/tooling for right‑sizing tasks.
 - Instruction templates for multiple providers (Claude, OpenAI “codex”), with shared common parts.
 - Simple release workflow (release.ts) to bump versions and update the changelog.

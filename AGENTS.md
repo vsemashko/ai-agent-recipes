@@ -39,14 +39,189 @@ interface PlatformConfig {
 }
 ```
 
-**To add a new platform**: Create a config entry + `instructions/{platform-key}/*.eta` templates (platform key must match instructions directory
-name). Template filenames determine output filenames (e.g., `CLAUDE.md.eta` → `CLAUDE.md`).
+**Adding a New Platform** (step-by-step):
+
+1. Add platform config in `cli/lib/installer.ts` `PLATFORM_CONFIGS`:
+
+```typescript
+{
+  key: "myplatform",              // Must match instructions directory name
+  name: "My Platform",
+  dir: "~/.myplatform",           // Installation directory
+  skillsFormat: "agent-md",       // Optional: convert skills to this format
+  configFile: "~/.myplatform/config.json",  // Optional: merge this config
+  pathReplacements: {             // Optional: adjust paths in templates
+    "~/.claude": "~/.myplatform"
+  }
+}
+```
+
+2. Create templates in `instructions/myplatform/`:
+   - Template filenames determine output: `AGENTS.md.eta` → `~/.myplatform/AGENTS.md`
+   - Use context variables: `<%= agents %>`, `<%= skillsSection %>`, `<%= platform %>`
+   - Add managed section markers for non-destructive updates
+
+3. Test with `deno task dev sync` to verify template rendering
+
+4. (Optional) Define merge strategies if using `configFile`:
+   - Add to `PLATFORM_CONFIGS[key].mergeStrategies`
+   - Available: `array-union`, `object-merge`, `user-first`, `managed-first`, `replace`
 
 ### Skills Management
 
-- Managed skills use `sa_` prefix in directory names
+- Managed skills use `sa-` prefix in directory names
 - Frontmatter: `name` (without prefix), `description`
 - Synced to `~/{platform-dir}/skills/` during `agent-recipes sync`
+- Skills are converted to platform-specific formats by `converter.ts`:
+  - **agent-md**: Bullet point for markdown lists (used by Codex/OpenCode)
+  - **cursor-mdc**: YAML frontmatter + body (Cursor editor)
+  - **codex-json**: JSON object with trigger field (Codex CLI)
+- Claude Code uses skills as-is (no conversion), other platforms embed converted skills in AGENTS.md
+
+**Referencing Skills from Other Skills**:
+
+- When referencing another skill, use the skill NAME (without `sa-` prefix)
+- NOT the folder name (which has the `sa-` prefix)
+- Example: Reference "rightsize" not "sa-rightsize", "branch-name" not "sa-branch-name"
+- This applies to all skill references in SKILL.md files, descriptions, and documentation
+
+## System Architecture
+
+### Module Organization
+
+The CLI is organized into specialized modules in `cli/lib/`:
+
+| Module             | Lines | Responsibility                                                              |
+| ------------------ | ----- | --------------------------------------------------------------------------- |
+| `installer.ts`     | 1361  | Orchestrates sync, repository discovery, template rendering, config merging |
+| `config-merger.ts` | 631+  | Three-way merge algorithm for configuration files                           |
+| `state-manager.ts` | 202   | Persists installation state and merge tracking                              |
+| `config-format.ts` | 183   | Auto-detects and parses JSON/JSONC/YAML/TOML formats                        |
+| `converter.ts`     | 121   | Transforms skills between platform-specific formats                         |
+
+**Dependency Flow**:
+
+```
+Commands (sync.ts, list.ts)
+    ↓
+Installer (core orchestrator)
+    ├→ StateManager (persist state.json)
+    ├→ ConfigMerger (three-way merge)
+    ├→ ConfigParserFactory (detect format)
+    └→ Converter (transform skills)
+```
+
+### Installation & Sync Process
+
+**Repository Discovery** (cli/lib/installer.ts:197-226):
+
+1. Checks `AGENT_RECIPES_HOME` environment variable
+2. Falls back to `~/.stashaway-agent-recipes/repo/`
+3. Checks runtime-relative path (for bundled binary)
+4. Searches for `instructions/` or `skills/` directories
+
+**Directory Structure Created**:
+
+```
+~/.stashaway-agent-recipes/
+├── config.json          # Installation metadata
+├── state.json           # Merge state tracking (base configs for three-way merge)
+├── bin/
+│   └── agent-recipes   # CLI binary
+└── repo/               # Git repository (if installed from git)
+```
+
+**Sync Flow** (cli/lib/installer.ts:315-393):
+
+1. Load `GLOBAL_INSTRUCTIONS.md` content
+2. For each platform:
+   - Convert skills to platform format (if `skillsFormat` specified)
+   - Render `instructions/common/skills.eta` template
+   - Discover all `.eta` templates in `instructions/{platform}/`
+   - Render each template with context: `{ agents, skillsSection, skillsList, platform }`
+   - Apply managed section markers (`<stashaway-recipes-managed-section>`)
+   - Write to `~/.{platform-dir}/` (e.g., `~/.claude/CLAUDE.md`)
+3. Sync skills with `sa-` prefix to `~/.{platform-dir}/skills/`
+4. Merge platform config files (if specified)
+
+**Managed Section System** (cli/lib/installer.ts:399-462):
+
+- Preserves user content above `<stashaway-recipes-managed-section>` marker
+- Replaces only managed block on sync (non-destructive updates)
+- Creates section on first sync if missing
+
+### Configuration Merging System
+
+**Why Three-Way Merge?**
+
+- Problem: How to sync managed configs while preserving user customizations?
+- Solution: Track "base" (last synced), detect user changes separately, apply managed changes
+- Benefit: Non-destructive updates, conflict visibility, user control
+
+**State Tracking** (`~/.stashaway-agent-recipes/state.json`):
+
+```typescript
+{
+  version: "1.0",
+  lastSync: "2024-01-15T10:30:00Z",
+  recipesVersion: "0.1.1",
+  configs: {
+    "claude": {
+      "~/.claude/config.json": {
+        // This is the last MANAGED config we synced (base for merge)
+        // NOT the user's current config
+      }
+    }
+  }
+}
+```
+
+**Merge Algorithm** (cli/lib/config-merger.ts):
+
+1. Load base config from `state.json` (what we last installed)
+2. Load user's current config file
+3. Load managed config from repo
+4. Call `threeWayMerge(base, user, managed)`
+5. Detect conflicts (user modified fields we also changed)
+6. Show preview, ask for approval if conflicts exist
+7. Write merged result to user config
+8. Update `state.json` with managed config (for next merge)
+
+**Merge Strategies** (configurable per field):
+
+- `array-union`: Combine arrays, remove duplicates
+- `object-merge`: Deep merge objects
+- `user-first`: Prefer user's value in conflicts
+- `managed-first`: Prefer managed value in conflicts
+- `replace`: Replace entire value
+
+**Conflict Detection**:
+
+- User modified: `user !== base`
+- Managed changed: `managed !== base`
+- Conflict: Both conditions true for same field
+
+### Template Context
+
+Templates receive the following context variables:
+
+```typescript
+{
+  agents: string // GLOBAL_INSTRUCTIONS.md content
+  skillsList: string // Raw list of skills (if any)
+  skillsSection: string // Rendered skills.eta template output
+  platform: string // Platform key (claude, codex, opencode)
+}
+```
+
+Access in templates: `<%= agents %>`, `<%= skillsSection %>`, etc.
+
+### Environment Variables
+
+- `AGENT_RECIPES_HOME` - Override installation directory (default: `~/.stashaway-agent-recipes`)
+- `AGENT_RECIPES_MODIFY_PATH` - Set to `0` to skip PATH updates
+- `AGENT_RECIPES_SOURCE_BRANCH` - Override branch for updates
+- `SHELL` - Detected to add binary to correct rc file
 
 ## Development Workflow
 
@@ -62,11 +237,20 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed instructions on:
 ```bash
 # Development
 deno task dev --help           # Run CLI in dev mode
-deno task build                # Compile binary
+deno task build                # Compile binary (outputs to bin/agent-recipes)
 deno task lint                 # Run linter
 deno task fmt                  # Format code
+deno test                      # Run all tests
 
-# Testing
+# Testing specific modules
+deno test cli/lib/installer.test.ts
+deno test cli/lib/config-merger.test.ts
+
+# Release (interactive workflow)
+deno task release              # Runs lint/tests, prompts for version, opens CHANGELOG editor
+                               # Updates deno.json, creates git commit and tag (main only)
+
+# Sync testing
 agent-recipes sync             # Test sync functionality
 agent-recipes list             # Verify skills detected
 ```
@@ -97,6 +281,39 @@ agent-recipes list             # Verify skills detected
 - **Type safety**: Leverage TypeScript for correctness
 - **Zero dependencies (where possible)**: Minimize external deps
 
+## Troubleshooting
+
+### Common Issues
+
+**Config merge conflicts**:
+
+- Check `~/.stashaway-agent-recipes/state.json` for base config
+- Compare with your current config to see what changed
+- Use `--force` flag to replace user config entirely (destructive)
+
+**Repository not found**:
+
+- Verify `AGENT_RECIPES_HOME` points to correct directory
+- Check that `instructions/` or `skills/` directories exist
+- Try reinstalling: remove `~/.stashaway-agent-recipes` and run install again
+
+**Skills not syncing**:
+
+- Ensure skill directories have `sa-` prefix for managed skills
+- Verify frontmatter has required `name` and `description` fields
+- Check `agent-recipes list` to see what's detected
+
+**Template rendering errors**:
+
+- Validate Eta syntax in `.eta` files
+- Ensure context variables are correctly referenced: `<%= variable %>`
+- Check for missing closing tags
+
+**State management issues**:
+
+- Delete `~/.stashaway-agent-recipes/state.json` to reset merge tracking
+- Next sync will treat managed config as base (may lose user customizations)
+
 ## Security
 
 - Never commit secrets or credentials
@@ -107,7 +324,7 @@ agent-recipes list             # Verify skills detected
 
 ## Branch Naming & Commits
 
-Use the **sa_commit-message** skill for proper formatting following StashAway standards.
+Use the **sa-commit-message** skill for proper formatting following StashAway standards.
 
 ---
 
