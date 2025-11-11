@@ -1,356 +1,331 @@
-# AI Agents for StashAway Agent Recipes
+# Claude Code Instructions for StashAway Agent Recipes
 
-This file defines specialized AI agents for working on the agent-recipes repository itself.
+This file contains instructions for working on the StashAway Agent Recipes repository itself.
 
-## Skill Developer Agent
+## Repository Overview
 
-Assists with creating new skills for the agent-recipes repository.
+**Repository**: stashaway-agent-recipes
 
-### Usage
+**Purpose**: Centralized repository for reusable AI agent configurations, instructions, skills, and tools for StashAway engineering teams.
 
-Invoke when: "Help me create a new skill" or "Add a skill for [purpose]"
+## Technology Stack
 
-### Capabilities
+- **Runtime**: Deno 2.x
+- **CLI Framework**: Cliffy (from JSR)
+- **Templating**: Eta templating engine
+- **Language**: TypeScript (strict mode)
+- **Testing**: Deno's built-in test runner
 
-- Creates skill directory structure
-- Generates SKILL.md with proper frontmatter
-- Converts skill to multiple formats
-- Tests skill with Claude Code
-- Provides usage examples
+## Core Principles
 
-### Workflow
+### Template System
 
-1. Ask user for skill name and description
-2. Create directory: `skills/sa_{skill-name}/` (managed skills use `sa_`, keep the actual skill name without the prefix)
-3. Generate `SKILL.md` with frontmatter:
-   ```markdown
-   ---
-   name: skill-name
-   description: Brief description
-   ---
-   ```
-4. Create sections:
-   - When to Use
-   - How It Works
-   - Example Usage
-   - Output Format
-5. Test with `agent-recipes sync`
-6. Convert to other formats
+- Uses Eta (`.eta` files) for flexible, maintainable templates
+- `instructions/GLOBAL_INSTRUCTIONS.md` is the single source of truth for global guidance
+- Platform templates in `instructions/{platform}/*.eta` compose the final outputs (e.g., `CLAUDE.md.eta`, `AGENTS.md.eta`)
+- Output filenames are derived from template filenames (strip `.eta` extension)
+- Skills template in `instructions/common/skills.eta` provides shared boilerplate
+
+### Platform Configuration
+
+Platforms are configured declaratively in `cli/lib/installer.ts`:
+
+```typescript
+interface PlatformConfig {
+  name: string // Display name
+  dir: string // Home directory (.claude, .codex, .opencode)
+  skillsFormat?: 'agent-md' // If set, convert & embed skills
+  pathReplacements?: Record<string, string> // Path adjustments
+}
+```
+
+**Adding a New Platform** (step-by-step):
+
+1. Add platform config in `cli/lib/installer.ts` `PLATFORM_CONFIGS`:
+
+```typescript
+{
+  key: "myplatform",              // Must match instructions directory name
+  name: "My Platform",
+  dir: "~/.myplatform",           // Installation directory
+  skillsFormat: "agent-md",       // Optional: convert skills to this format
+  configFile: "~/.myplatform/config.json",  // Optional: merge this config
+  pathReplacements: {             // Optional: adjust paths in templates
+    "~/.claude": "~/.myplatform"
+  }
+}
+```
+
+2. Create templates in `instructions/myplatform/`:
+   - Template filenames determine output: `AGENTS.md.eta` → `~/.myplatform/AGENTS.md`
+   - Use context variables: `<%= agents %>`, `<%= skillsSection %>`, `<%= platform %>`
+   - Add managed section markers for non-destructive updates
+
+3. Test with `deno task dev sync` to verify template rendering
+
+4. (Optional) Define merge strategies if using `configFile`:
+   - Add to `PLATFORM_CONFIGS[key].mergeStrategies`
+   - Available: `array-union`, `object-merge`, `user-first`, `managed-first`, `replace`
+
+### Skills Management
+
+- Managed skills use `sa-` prefix in directory names
+- Frontmatter: `name` (without prefix), `description`
+- Synced to `~/{platform-dir}/skills/` during `agent-recipes sync`
+- Skills are converted to platform-specific formats by `converter.ts`:
+  - **agent-md**: Bullet point for markdown lists (used by Codex/OpenCode)
+  - **cursor-mdc**: YAML frontmatter + body (Cursor editor)
+  - **codex-json**: JSON object with trigger field (Codex CLI)
+- Claude Code uses skills as-is (no conversion), other platforms embed converted skills in AGENTS.md
+
+**Referencing Skills from Other Skills**:
+
+- When referencing another skill, use the skill NAME (without `sa-` prefix)
+- NOT the folder name (which has the `sa-` prefix)
+- Example: Reference "rightsize" not "sa-rightsize", "branch-name" not "sa-branch-name"
+- This applies to all skill references in SKILL.md files, descriptions, and documentation
+
+## System Architecture
+
+### Module Organization
+
+The CLI is organized into specialized modules in `cli/lib/`:
+
+| Module             | Lines | Responsibility                                                              |
+| ------------------ | ----- | --------------------------------------------------------------------------- |
+| `installer.ts`     | 1361  | Orchestrates sync, repository discovery, template rendering, config merging |
+| `config-merger.ts` | 631+  | Three-way merge algorithm for configuration files                           |
+| `state-manager.ts` | 202   | Persists installation state and merge tracking                              |
+| `config-format.ts` | 183   | Auto-detects and parses JSON/JSONC/YAML/TOML formats                        |
+| `converter.ts`     | 121   | Transforms skills between platform-specific formats                         |
+
+**Dependency Flow**:
+
+```
+Commands (sync.ts, list.ts)
+    ↓
+Installer (core orchestrator)
+    ├→ StateManager (persist state.json)
+    ├→ ConfigMerger (three-way merge)
+    ├→ ConfigParserFactory (detect format)
+    └→ Converter (transform skills)
+```
+
+### Installation & Sync Process
+
+**Repository Discovery** (cli/lib/installer.ts:197-226):
+
+1. Checks `AGENT_RECIPES_HOME` environment variable
+2. Falls back to `~/.stashaway-agent-recipes/repo/`
+3. Checks runtime-relative path (for bundled binary)
+4. Searches for `instructions/` or `skills/` directories
+
+**Directory Structure Created**:
+
+```
+~/.stashaway-agent-recipes/
+├── config.json          # Installation metadata
+├── state.json           # Merge state tracking (base configs for three-way merge)
+├── bin/
+│   └── agent-recipes   # CLI binary
+└── repo/               # Git repository (if installed from git)
+```
+
+**Sync Flow** (cli/lib/installer.ts:315-393):
+
+1. Load `GLOBAL_INSTRUCTIONS.md` content
+2. For each platform:
+   - Convert skills to platform format (if `skillsFormat` specified)
+   - Render `instructions/common/skills.eta` template
+   - Discover all `.eta` templates in `instructions/{platform}/`
+   - Render each template with context: `{ agents, skillsSection, skillsList, platform }`
+   - Apply managed section markers (`<stashaway-recipes-managed-section>`)
+   - Write to `~/.{platform-dir}/` (e.g., `~/.claude/CLAUDE.md`)
+3. Sync skills with `sa-` prefix to `~/.{platform-dir}/skills/`
+4. Merge platform config files (if specified)
+
+**Managed Section System** (cli/lib/installer.ts:399-462):
+
+- Preserves user content above `<stashaway-recipes-managed-section>` marker
+- Replaces only managed block on sync (non-destructive updates)
+- Creates section on first sync if missing
+
+### Configuration Merging System
+
+**Why Three-Way Merge?**
+
+- Problem: How to sync managed configs while preserving user customizations?
+- Solution: Track "base" (last synced), detect user changes separately, apply managed changes
+- Benefit: Non-destructive updates, conflict visibility, user control
+
+**State Tracking** (`~/.stashaway-agent-recipes/state.json`):
+
+```typescript
+{
+  version: "1.0",
+  lastSync: "2024-01-15T10:30:00Z",
+  recipesVersion: "0.1.1",
+  configs: {
+    "claude": {
+      "~/.claude/config.json": {
+        // This is the last MANAGED config we synced (base for merge)
+        // NOT the user's current config
+      }
+    }
+  }
+}
+```
+
+**Merge Algorithm** (cli/lib/config-merger.ts):
+
+1. Load base config from `state.json` (what we last installed)
+2. Load user's current config file
+3. Load managed config from repo
+4. Call `threeWayMerge(base, user, managed)`
+5. Detect conflicts (user modified fields we also changed)
+6. Show preview, ask for approval if conflicts exist
+7. Write merged result to user config
+8. Update `state.json` with managed config (for next merge)
+
+**Merge Strategies** (configurable per field):
+
+- `array-union`: Combine arrays, remove duplicates
+- `object-merge`: Deep merge objects
+- `user-first`: Prefer user's value in conflicts
+- `managed-first`: Prefer managed value in conflicts
+- `replace`: Replace entire value
+
+**Conflict Detection**:
+
+- User modified: `user !== base`
+- Managed changed: `managed !== base`
+- Conflict: Both conditions true for same field
+
+### Template Context
+
+Templates receive the following context variables:
+
+```typescript
+{
+  agents: string // GLOBAL_INSTRUCTIONS.md content
+  skillsList: string // Raw list of skills (if any)
+  skillsSection: string // Rendered skills.eta template output
+  platform: string // Platform key (claude, codex, opencode)
+}
+```
+
+Access in templates: `<%= agents %>`, `<%= skillsSection %>`, etc.
+
+### Environment Variables
+
+- `AGENT_RECIPES_HOME` - Override installation directory (default: `~/.stashaway-agent-recipes`)
+- `AGENT_RECIPES_MODIFY_PATH` - Set to `0` to skip PATH updates
+- `AGENT_RECIPES_SOURCE_BRANCH` - Override branch for updates
+- `SHELL` - Detected to add binary to correct rc file
+
+## Development Workflow
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed instructions on:
+
+- Adding skills
+- Creating CLI commands
+- Modifying templates
+- Testing and releasing
+
+### Quick Commands
+
+```bash
+# Development
+deno task dev --help           # Run CLI in dev mode
+deno task build                # Compile binary (outputs to bin/agent-recipes)
+deno task lint                 # Run linter
+deno task fmt                  # Format code
+deno test                      # Run all tests
+
+# Testing specific modules
+deno test cli/lib/installer.test.ts
+deno test cli/lib/config-merger.test.ts
+
+# Release (interactive workflow)
+deno task release              # Runs lint/tests, prompts for version, opens CHANGELOG editor
+                               # Updates deno.json, creates git commit and tag (main only)
+
+# Sync testing
+agent-recipes sync             # Test sync functionality
+agent-recipes list             # Verify skills detected
+```
+
+## Recording Changes
+
+- Update `CHANGELOG.md` whenever skills, instructions, or CLI features change
+- Keep the `Unreleased` section current during development
+- Move entries to versioned sections during release prep
+- Include manual follow-up steps users must perform
+- Capture instruction changes, skill updates, and CLI behavior adjustments
+
+## Code Quality Standards
+
+### Style Guidelines
+
+- Write clean, readable code following existing patterns
+- Use TypeScript strict mode with no implicit any
+- Prefer async/await over callbacks
+- Add JSDoc comments for public APIs
+- Follow Deno formatting conventions
+
+### Architecture Decisions
+
+- **Convention over configuration**: Predictable file locations and naming
+- **Declarative configs**: Keep logic in code, data in configs
+- **Simplicity first**: Prefer straightforward solutions
+- **Type safety**: Leverage TypeScript for correctness
+- **Zero dependencies (where possible)**: Minimize external deps
+
+## Troubleshooting
+
+### Common Issues
+
+**Config merge conflicts**:
+
+- Check `~/.stashaway-agent-recipes/state.json` for base config
+- Compare with your current config to see what changed
+- Use `--force` flag to replace user config entirely (destructive)
+
+**Repository not found**:
+
+- Verify `AGENT_RECIPES_HOME` points to correct directory
+- Check that `instructions/` or `skills/` directories exist
+- Try reinstalling: remove `~/.stashaway-agent-recipes` and run install again
+
+**Skills not syncing**:
+
+- Ensure skill directories have `sa-` prefix for managed skills
+- Verify frontmatter has required `name` and `description` fields
+- Check `agent-recipes list` to see what's detected
+
+**Template rendering errors**:
+
+- Validate Eta syntax in `.eta` files
+- Ensure context variables are correctly referenced: `<%= variable %>`
+- Check for missing closing tags
+
+**State management issues**:
+
+- Delete `~/.stashaway-agent-recipes/state.json` to reset merge tracking
+- Next sync will treat managed config as base (may lose user customizations)
+
+## Security
+
+- Never commit secrets or credentials
+- Use environment variables for sensitive data
+- Sanitize all user inputs
+- Follow OWASP best practices
+- Review security implications of all changes
+
+## Branch Naming & Commits
+
+Use the **sa-commit-message** skill for proper formatting following StashAway standards.
 
 ---
 
-## CLI Command Builder Agent
-
-Helps add new commands to the agent-recipes CLI.
-
-### Usage
-
-Invoke when: "Add a new CLI command" or "Create command for [purpose]"
-
-### Capabilities
-
-- Creates command file in `cli/commands/`
-- Uses Cliffy Command API
-- Registers command in main.ts
-- Adds options and arguments
-- Implements action handler
-- Provides testing instructions
-
-### Workflow
-
-1. Ask user for command name and purpose
-2. Create `cli/commands/{command-name}.ts`
-3. Import required dependencies
-4. Define command with description
-5. Add options and arguments
-6. Implement action handler
-7. Register in `main.ts`
-8. Test with `deno run --allow-all main.ts {command-name}`
-
----
-
-## Format Converter Agent
-
-Converts skills between different AI tool formats.
-
-### Usage
-
-Invoke when: "Convert skill to [format]" or "Generate [format] version"
-
-### Capabilities
-
-- Parses SKILL.md frontmatter and content
-- Converts to AGENTS.md format
-- Converts to Cursor .mdc format
-- Converts to Codex JSON format
-- Batch converts all skills
-- Validates output format
-
-### Supported Formats
-
-1. **AGENTS.md**: Claude Code agent definitions
-2. **Cursor MDC**: Cursor rules (.mdc files)
-3. **Codex JSON**: Codex CLI agents.json
-
-### Workflow
-
-1. Read SKILL.md file
-2. Parse frontmatter (name, description)
-3. Extract content sections
-4. Transform to target format
-5. Write output file
-6. Validate format correctness
-
----
-
-## Installation Tester Agent
-
-Tests the installation process across different scenarios.
-
-### Usage
-
-Invoke when: "Test installation" or "Verify install script works"
-
-### Capabilities
-
-- Tests fresh installation
-- Tests update scenario
-- Verifies PATH modification
-- Checks AI tool detection
-- Validates file copying/symlinking
-- Tests across different shells (zsh, bash)
-
-### Test Scenarios
-
-1. **Fresh Install**:
-   - No existing installation
-   - Deno already installed
-   - First-time setup
-
-2. **Update**:
-   - Existing installation
-   - Config migration
-   - Preserving custom settings
-
-3. **Different Shells**:
-   - zsh (macOS default)
-   - bash
-   - Custom shell configurations
-
-### Workflow
-
-1. Check current state
-2. Run install.sh
-3. Verify directory structure
-4. Check PATH modification
-5. Test CLI commands
-6. Verify AI tool sync
-7. Clean up test artifacts
-
----
-
-## Documentation Generator Agent
-
-Generates and updates documentation for the repository.
-
-### Usage
-
-Invoke when: "Update documentation" or "Generate docs for [component]"
-
-### Capabilities
-
-- Updates README.md with new features
-- Generates command documentation
-- Creates skill documentation
-- Updates PLAN_claude.md
-- Syncs docs across formats
-- Maintains CHANGELOG.md entries for instruction and skill updates
-- Checks for doc inconsistencies
-
-### Documentation Types
-
-1. **User Documentation**: README.md
-2. **Developer Documentation**: CLAUDE.md
-3. **Implementation Plan**: PLAN_claude.md
-4. **Skill Documentation**: skills/*/README.md
-5. **API Documentation**: JSDoc comments
-
-### Workflow
-
-1. Identify what needs documentation
-2. Generate or update relevant files
-3. Ensure consistency across docs
-4. Update `CHANGELOG.md` with summaries when skills or global instructions change
-5. Validate links and references
-6. Check for completeness
-
----
-
-## Template Customizer Agent
-
-Helps customize templates for repo-specific setup (currently deferred).
-
-### Usage
-
-Invoke when: "Customize template" or "Update [tool] template"
-
-### Capabilities
-
-- Maintains template variables once project-specific setup returns
-- Documents expected structure for repo-level instruction files
-- Coordinates with Documentation Generator to keep guidance up to date
-
-### Status
-
-- Project-specific templates are currently disabled
-- Reactivate this agent when repo-scoped automation is reintroduced
-- Monitor roadmap items in PLAN_claude.md for updates
-
----
-
-## Skill Validator Agent
-
-Validates skill definitions for correctness and completeness.
-
-### Usage
-
-Invoke when: "Validate skill" or "Check skill format"
-
-### Capabilities
-
-- Validates frontmatter format
-- Checks required sections
-- Verifies markdown syntax
-- Tests skill invocation
-- Suggests improvements
-- Checks against skill guidelines
-
-### Validation Rules
-
-1. **Frontmatter**:
-   - Has name field
-   - Has description field
-   - Name is lowercase-hyphenated
-   - Description is concise
-
-2. **Content**:
-   - Has "When to Use" section
-   - Has "How It Works" section
-   - Has "Example Usage" section
-   - Proper markdown formatting
-
-3. **Completeness**:
-   - Examples are clear
-   - No broken references
-   - Proper spelling/grammar
-
-### Workflow
-
-1. Read SKILL.md file
-2. Parse and validate frontmatter
-3. Check content structure
-4. Validate markdown syntax
-5. Test conversions
-6. Report issues and suggestions
-
----
-
-## Version Manager Agent
-
-Manages version updates and releases.
-
-### Usage
-
-Invoke when: "Bump version" or "Create release"
-
-### Capabilities
-
-- Updates version numbers
-- Creates git tags
-- Updates CHANGELOG.md with release notes
-- Updates documentation
-- Creates release notes
-- Validates release readiness
-
-### Version Update Workflow
-
-1. Determine version bump (major, minor, patch)
-2. Update `deno.json` (manual edit; no automated version helper available yet)
-3. Update `main.ts` VERSION constant
-4. Update `CHANGELOG.md` with release notes (call out new/updated skills and instruction changes)
-5. Update README.md if needed
-6. Create git tag
-7. Push to remote
-
----
-
-## Integration Tester Agent
-
-Tests integration with AI tools (Claude Code, Codex, Cursor).
-
-### Usage
-
-Invoke when: "Test with [tool]" or "Verify [tool] integration"
-
-### Capabilities
-
-- Tests Claude Code integration
-- Tests Codex CLI integration
-- Tests Cursor integration
-- Verifies skill loading
-- Tests file sync
-- Validates format compatibility
-
-### Test Workflow
-
-1. Sync instructions for tool
-2. Open tool and test skill invocation
-3. Verify instructions are loaded
-4. Test skill functionality
-5. Check for errors or issues
-6. Document compatibility notes
-
----
-
-## Performance Optimizer Agent
-
-Optimizes CLI performance and installation speed.
-
-### Usage
-
-Invoke when: "Optimize performance" or "Speed up [operation]"
-
-### Capabilities
-
-- Profiles CLI commands
-- Identifies bottlenecks
-- Optimizes file operations
-- Improves startup time
-- Reduces bundle size
-- Caches expensive operations
-
-### Optimization Areas
-
-1. **CLI Startup**: Fast command initialization
-2. **File Operations**: Efficient copying/symlinking
-3. **API Calls**: Concurrent requests, caching
-4. **Build Size**: Minimize compiled binary size
-5. **Installation**: Quick setup process
-
----
-
-## How to Use These Agents
-
-Simply mention the agent's purpose in your request:
-
-- "Help me create a new skill for database migrations"
-- "Add a CLI command to list configurations"
-- "Convert the rightsize skill to Cursor format"
-- "Test the installation process"
-- "Update the README with new features"
-
-Claude will automatically understand which agent to invoke based on context.
-
----
-
-_These agents make developing and maintaining agent-recipes easier and more consistent._
+_For repository structure details and conventions, see AGENTS.md. For detailed development workflows, see CONTRIBUTING.md._

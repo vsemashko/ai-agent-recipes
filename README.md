@@ -78,7 +78,13 @@ To use a skill, simply ask Claude naturally:
 ### Codex CLI
 
 - **Location**: `~/.codex/`
-- **Format**: Auto-generated AGENTS.md from global instructions + skills
+- **Format**: AGENTS.md with embedded instructions + skills
+- **Setup**: Automatic via `agent-recipes sync`
+
+### OpenCode
+
+- **Location**: `~/.opencode/`
+- **Format**: AGENTS.md with embedded instructions + skills
 - **Setup**: Automatic via `agent-recipes sync`
 
 ## 🔄 Keeping Up to Date
@@ -86,18 +92,13 @@ To use a skill, simply ask Claude naturally:
 The CLI automatically checks for updates:
 
 ```bash
-# Check for updates and sync instructions
 agent-recipes sync
-
-# Update to latest version and re-sync everything
-agent-recipes sync --force
 ```
 
 **How it works:**
 
 - Installed as a git repository in `~/.stashaway-agent-recipes/`
-- `sync` checks if remote has new commits
-- `--force` pulls latest changes and re-syncs everything
+- `sync` checks for new commits, pulls them, and refreshes instructions
 - Instructions and skills are automatically updated
 
 ## 📁 What Gets Installed?
@@ -105,7 +106,7 @@ agent-recipes sync --force
 ### For Claude Code Users
 
 - Global instructions → `~/.claude/CLAUDE.md`
-- Skills directory → `~/.claude/skills/` (managed copies with `sa_` prefix)
+- Skills directory → `~/.claude/skills/` (managed copies with `sa-` prefix)
 
 ### For Codex CLI Users
 
@@ -134,6 +135,27 @@ The synced files use **managed sections**. You can safely add your own content a
 </stashaway-recipes-managed-section>
 ```
 
+`instructions/GLOBAL_INSTRUCTIONS.md` is the single source of truth for the managed block. Update that file when editing global guidance—platform
+templates automatically inject it during `agent-recipes sync`.
+
+### Template System
+
+We use [Eta](https://eta.js.org/) templating for flexible, maintainable instruction generation:
+
+- `instructions/GLOBAL_INSTRUCTIONS.md` - Shared guidance embedded into all platforms
+- `instructions/{platform}/*.eta` - Platform-specific templates (filenames determine outputs)
+- `instructions/common/skills.eta` - Shared skills section template
+
+### Platform-Specific Customization
+
+To customize instructions for a specific platform:
+
+1. Edit `instructions/{platform}/*.eta` (e.g., `codex/AGENTS.md.eta`)
+2. Add platform-specific content using Eta syntax
+3. Run `agent-recipes sync` to apply changes
+
+See `instructions/README.md` for detailed template documentation.
+
 **On sync:**
 
 - ✅ Your content above the marker is preserved
@@ -142,14 +164,14 @@ The synced files use **managed sections**. You can safely add your own content a
 
 ### Custom Skills
 
-Skills with the `sa_` prefix are managed by agent-recipes. To add custom skills:
+Skills with the `sa-` prefix are managed by agent-recipes. To add custom skills:
 
 **Option 1: Add alongside (recommended)**
 
 ```bash
 ~/.claude/skills/
-├── sa_rightsize/        # Managed - updated on sync
-├── sa_commit-message/   # Managed - updated on sync
+├── sa-rightsize/        # Managed - updated on sync
+├── sa-commit-message/   # Managed - updated on sync
 ├── my-custom-skill/     # Yours - never touched!
 └── db-migration/        # Yours - never touched!
 ```
@@ -157,8 +179,8 @@ Skills with the `sa_` prefix are managed by agent-recipes. To add custom skills:
 **Option 2: Customize a managed skill**
 
 ```bash
-# Copy and remove sa_ prefix
-cp -r ~/.claude/skills/sa_rightsize ~/.claude/skills/rightsize
+# Copy and remove sa- prefix
+cp -r ~/.claude/skills/sa-rightsize ~/.claude/skills/rightsize
 
 # Now edit rightsize/ - it's yours!
 # Note: You won't get automatic updates for this skill
@@ -176,7 +198,21 @@ We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for:
 Quick overview:
 
 1. Create a feature branch: `<type>/<ticket>-<description>`
-2. Add your skill in `skills/sa_my-skill/SKILL.md` (keep the `name` field without the prefix)
+
+### Versioning & Releases
+
+- Project version lives in `deno.json` (and powers the CLI `--version` flag).
+- Run `deno task release` to cut a release:
+  1. Lints/tests the repo (unless `--skip-tests`)
+  2. Prompts for the next semver (patch/minor/major)
+  3. Inserts a new `CHANGELOG.md` section seeded from git commits (you can edit it in your `$EDITOR`)
+  4. Updates `deno.json`, and if you're on `main`, commits + tags `Release <version>` (feature branches skip the commit/tag so you can land changes
+     via MR).
+- After running on `main`, push the branch & tags: `git push && git push --tags`.
+- When running from a feature branch, review and commit `deno.json` + `CHANGELOG.md` as part of your merge request, then tag the release on `main`
+  once merged.
+
+2. Add your skill in `skills/sa-my-skill/SKILL.md` (keep the `name` field without the prefix)
 3. Test with `agent-recipes sync`
 4. Submit a merge request
 
@@ -200,7 +236,7 @@ ls ~/.claude/skills/
 ### AGENTS.md not updating for Codex
 
 ```bash
-agent-recipes sync --force
+agent-recipes sync
 cat ~/.codex/AGENTS.md
 ```
 

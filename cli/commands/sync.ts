@@ -3,9 +3,11 @@ import { Installer } from '../lib/installer.ts'
 
 export const syncCommand = new Command()
   .description('Install/update/sync agent recipes (handles initial install and updates)')
-  .option('-f, --force', 'Force reinstall even if already installed')
+  .option('--skip-configs', 'Skip syncing configuration files')
+  .option('--yes, -y', 'Auto-approve all changes without prompting')
+  .option('--verbose, -v', 'Show verbose output during sync')
   .action(async (options) => {
-    const installer = new Installer()
+    const installer = new Installer({ verbose: Boolean(options.verbose) })
 
     try {
       const isInstalled = await installer.isInstalled()
@@ -35,11 +37,23 @@ export const syncCommand = new Command()
         await installer.saveConfig(config)
 
         // Add to PATH
-        await installer.addToPath()
+        if (installer.shouldModifyPath()) {
+          await installer.addToPath()
+        } else {
+          console.log('ℹ Skipping PATH updates (AGENT_RECIPES_MODIFY_PATH=0)')
+        }
 
         // Sync instructions
         const updatedConfig = await installer.syncInstructions(tools, config)
         await installer.saveConfig(updatedConfig)
+
+        // Sync configs (if not skipped)
+        if (!options.skipConfigs) {
+          await installer.syncConfigs(tools, updatedConfig, Boolean(options.yes))
+        }
+
+        const installedVersion = await installer.getInstalledRecipesVersion()
+        await installer.recordInstalledRecipesVersion(installedVersion)
 
         console.log('\n✅ Installation complete!')
         console.log(`\n📁 Installed to: ${installer.getInstallPath()}`)
@@ -47,87 +61,60 @@ export const syncCommand = new Command()
         console.log('  1. Restart your shell or run: source ~/.zshrc (or ~/.bashrc)')
         console.log('  2. Run `agent-recipes list` to see available skills')
         console.log('  3. Open your AI tools and confirm the global instructions are loaded')
-      } else if (options.force) {
-        // Force update - pull latest and re-sync everything
-        console.log('🔄 Force updating StashAway Agent Recipes...\n')
-
-        const config = await installer.getConfig()
-        if (!config) {
-          console.error('❌ Could not read config. Try reinstalling.')
-          Deno.exit(1)
-        }
-
-        // Check for updates first
-        const updateInfo = await installer.checkForUpdates()
-
-        if (updateInfo?.hasUpdate) {
-          console.log(
-            `📥 Updating from ${updateInfo.currentVersion} to ${updateInfo.latestVersion}...\n`,
-          )
-
-          if (updateInfo.changelogDiff) {
-            console.log('📄 Changelog diff since your current version:\n')
-            console.log(updateInfo.changelogDiff)
-            console.log()
-          }
-
-          // Pull latest changes
-          const pullSuccess = await installer.pullLatestChanges()
-          if (!pullSuccess) {
-            console.error('❌ Failed to pull latest changes')
-            Deno.exit(1)
-          }
-
-          console.log('✓ Repository updated to latest version\n')
-        } else if (updateInfo) {
-          console.log(`✓ Already on latest version (${updateInfo.currentVersion})\n`)
-        }
-
-        // Re-sync instructions
-        console.log('📝 Re-syncing instructions...\n')
-        const updatedConfig = await installer.syncInstructions(config.installedTools, config)
-        updatedConfig.lastUpdateCheck = new Date().toISOString()
-        await installer.saveConfig(updatedConfig)
-
-        console.log('\n✅ Force update complete!')
-      } else {
-        // Update/sync existing installation
-        console.log('🔄 Checking for updates...\n')
-
-        const config = await installer.getConfig()
-        if (!config) {
-          console.error('❌ Could not read config. Try running with --force')
-          Deno.exit(1)
-        }
-
-        // Check for updates
-        const updateInfo = await installer.checkForUpdates()
-
-        if (updateInfo?.hasUpdate) {
-          console.log(`📦 New version available!`)
-          console.log(`   Current: ${updateInfo.currentVersion}`)
-          console.log(`   Latest:  ${updateInfo.latestVersion}`)
-          if (updateInfo.changelogDiff) {
-            console.log('\n📄 Changelog diff since your version:\n')
-            console.log(updateInfo.changelogDiff)
-          }
-          console.log(`\n   Run \`agent-recipes sync --force\` to update\n`)
-        } else if (updateInfo) {
-          console.log(`✓ Up to date (${updateInfo.currentVersion})\n`)
-        } else {
-          console.log('✓ Version check skipped\n')
-        }
-
-        // Re-sync instructions
-        console.log('📝 Syncing instructions...\n')
-        const updatedConfig = await installer.syncInstructions(config.installedTools, config)
-
-        // Update last check time
-        updatedConfig.lastUpdateCheck = new Date().toISOString()
-        await installer.saveConfig(updatedConfig)
-
-        console.log('✅ Sync complete!')
+        return
       }
+
+      console.log('🔄 Reinstalling latest recipes...\n')
+
+      const config = await installer.getConfig()
+      if (!config) {
+        console.error('❌ Could not read config. Try reinstalling.')
+        Deno.exit(1)
+      }
+
+      const previousVersion = await installer.getInstalledRecipesVersion()
+      const updateInfo = await installer.checkForUpdates()
+
+      if (updateInfo?.hasUpdate) {
+        console.log(`📦 Update available (${previousVersion ?? 'unknown'} → latest)\n`)
+      } else if (updateInfo) {
+        console.log(`✓ Already on latest version (${previousVersion ?? 'unknown'})\n`)
+      } else {
+        console.log('✓ Version check skipped\n')
+      }
+
+      console.log('📥 Refreshing repository files...\n')
+      const pullSuccess = await installer.pullLatestChanges()
+      if (pullSuccess) {
+        console.log('✓ Repository refreshed\n')
+
+        const newVersion = await installer.getInstalledRecipesVersion()
+        if (updateInfo?.hasUpdate) {
+          console.log(`📦 Updated recipes to ${newVersion ?? 'latest'} (was ${previousVersion ?? 'unknown'})`)
+          const changelogReference = updateInfo.changelogUrl ?? 'CHANGELOG.md'
+          console.log(`📄 Changelog: ${changelogReference}\n`)
+        }
+        await installer.recordInstalledRecipesVersion(newVersion)
+      } else {
+        console.log('  ⚠ Could not refresh repository automatically (non-git install?)')
+        console.log('    Continuing with existing files\n')
+
+        if (updateInfo?.hasUpdate) {
+          console.error('❌ Failed to pull latest changes')
+          Deno.exit(1)
+        }
+      }
+
+      const updatedConfig = await installer.syncInstructions(config.installedTools, config)
+      updatedConfig.lastUpdateCheck = new Date().toISOString()
+      await installer.saveConfig(updatedConfig)
+
+      // Sync configs (if not skipped)
+      if (!options.skipConfigs) {
+        await installer.syncConfigs(config.installedTools, updatedConfig, Boolean(options.yes))
+      }
+
+      console.log('✅ Sync complete!')
     } catch (error) {
       console.error('❌ Error during sync:', error)
       Deno.exit(1)
