@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.2
+
+- feat: SA-665 Exclude skills scripts from deno linting
+- feat: SA-665 Exclude skills scripts from deno linting
+- feat: SA-665 Improve skills
+-
+  - make skill names consistent
+-
+  - add more skills, copy some skills from claude skills repo
+-
+  - improve skills
+-
+  - fix platform configs
+-
+  - add opencode configs
+-
+  -
+
 ## 0.1.1
 
 - Merge branch 'feat/improve-release' into 'main'
