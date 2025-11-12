@@ -7,6 +7,11 @@ import { ConfigParserFactory } from './config-format.ts'
 import { type ConfigChange, ConfigMerger } from './config-merger.ts'
 import { StateManager } from './state-manager.ts'
 import { PLATFORM_CONFIGS } from './platform-config.ts'
+import {
+  parseFrontmatter,
+  processContentForPlatform,
+  reconstructMarkdown,
+} from './agents-commands-converter.ts'
 
 export interface InstallConfig {
   version: string
@@ -34,6 +39,8 @@ interface PlatformSyncSummary {
   name: string
   fileChanges: ManagedFileChange[]
   skillUpdates: number
+  agentUpdates: number
+  commandUpdates: number
 }
 
 interface SyncSkillsOptions {
@@ -286,7 +293,12 @@ export class Installer {
       }
     }
 
-    const changedPlatforms = summaries.filter((summary) => summary.fileChanges.length > 0 || summary.skillUpdates > 0)
+    const changedPlatforms = summaries.filter((summary) => 
+      summary.fileChanges.length > 0 || 
+      summary.skillUpdates > 0 || 
+      summary.agentUpdates > 0 || 
+      summary.commandUpdates > 0
+    )
 
     if (changedPlatforms.length > 0) {
       console.log('📝 Instructions updated:')
@@ -301,8 +313,15 @@ export class Installer {
         }
 
         if (summary.skillUpdates > 0) {
-          const label = summary.skillUpdates === 1 ? 'skill' : 'skills'
-          parts.push(`synced ${summary.skillUpdates} managed ${label}`)
+          parts.push(`synced ${summary.skillUpdates} managed skill(s)`)
+        }
+
+        if (summary.agentUpdates > 0) {
+          parts.push(`synced ${summary.agentUpdates} agents(s)`)
+        }
+
+        if (summary.commandUpdates > 0) {
+          parts.push(`synced ${summary.commandUpdates} command(s)`)
         }
 
         console.log(`  • ${summary.name}: ${parts.join('; ')}`)
@@ -331,6 +350,8 @@ export class Installer {
       name: config.name,
       fileChanges: [],
       skillUpdates: 0,
+      agentUpdates: 0,
+      commandUpdates: 0,
     }
 
     // Build template data
@@ -394,7 +415,93 @@ export class Installer {
       })
     }
 
+    // Sync agents directory
+    if (config.agentsDir) {
+      const agentsSource = join(repoRoot, 'agents')
+      if (await exists(agentsSource)) {
+        const agentsTarget = join(targetDir, config.agentsDir)
+        await Deno.mkdir(agentsTarget, { recursive: true })
+
+        for await (const entry of Deno.readDir(agentsSource)) {
+          if (entry.isFile && entry.name.endsWith('.md')) {
+            const sourcePath = join(agentsSource, entry.name)
+            const content = await this.processAgentFile(sourcePath, platformKey)
+            const targetPath = join(agentsTarget, entry.name)
+            await Deno.writeTextFile(targetPath, content)
+            summary.agentUpdates++
+            this.logVerbose(`    ✓ Synced agent: ${entry.name}`)
+          }
+        }
+
+        if (summary.agentUpdates > 0) {
+          this.logVerbose(`  ✓ Synced ${summary.agentUpdates} agent(s)`)
+        }
+      }
+    }
+
+    // Sync commands directory
+    if (config.commandsDir) {
+      const commandsSource = join(repoRoot, 'commands')
+      if (await exists(commandsSource)) {
+        const commandsTarget = join(targetDir, config.commandsDir)
+        await Deno.mkdir(commandsTarget, { recursive: true })
+
+        for await (const entry of Deno.readDir(commandsSource)) {
+          if (entry.isFile && entry.name.endsWith('.md')) {
+            const sourcePath = join(commandsSource, entry.name)
+            const content = await this.processCommandFile(sourcePath, platformKey)
+            const targetPath = join(commandsTarget, entry.name)
+            await Deno.writeTextFile(targetPath, content)
+            summary.commandUpdates++
+            this.logVerbose(`    ✓ Synced command: ${entry.name}`)
+          }
+        }
+
+        if (summary.commandUpdates > 0) {
+          this.logVerbose(`  ✓ Synced ${summary.commandUpdates} command(s)`)
+        }
+      }
+    }
+
     return summary
+  }
+
+  /**
+   * Process agent file for specific platform
+   * Applies platform-specific transformations
+   */
+  private async processAgentFile(filePath: string, platformKey: string): Promise<string> {
+    const content = await Deno.readTextFile(filePath)
+    const parsed = parseFrontmatter(content)
+
+    if (!parsed) {
+      // Invalid format, return as-is
+      return content
+    }
+
+    const config = PLATFORM_CONFIGS[platformKey]
+    const processed = processContentForPlatform(parsed, platformKey, config?.toolsFormat)
+
+    return reconstructMarkdown(processed.frontmatter, processed.body)
+  }
+
+  /**
+   * Process command file for specific platform
+   * Applies platform-specific transformations
+   */
+  private async processCommandFile(filePath: string, platformKey: string): Promise<string> {
+    const content = await Deno.readTextFile(filePath)
+    const parsed = parseFrontmatter(content)
+
+    if (!parsed) {
+      // Invalid format, return as-is
+      return content
+    }
+
+    const config = PLATFORM_CONFIGS[platformKey]
+    const processed = processContentForPlatform(parsed, platformKey, config?.toolsFormat)
+
+    return reconstructMarkdown(processed.frontmatter, processed.body)
   }
 
   /**

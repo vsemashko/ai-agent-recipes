@@ -3,7 +3,6 @@ name: code-reviewer
 description: Expert code review specialist for quality, security, performance, and maintainability. Use for PR reviews, security audits, and code quality assessments.
 tools: Read, Grep, Glob, Bash
 model: sonnet
-disabledTools: Write, Edit
 ---
 
 # Code Review Agent

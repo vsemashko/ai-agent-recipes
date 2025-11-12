@@ -4,26 +4,35 @@
 
 ### Added
 
-- Created comprehensive plan for multi-provider agents and commands support (PLAN_SUBAGENTS_CLAUDE.md)
-- Added new sample agents:
-  - `documentation-writer` - Technical documentation specialist
-- Added new sample commands:
-  - `/refactor` - Refactor code following best practices
-  - `/test-gen` - Generate comprehensive tests
+- **Multi-provider agents and commands sync system**
+  - New `agents-commands-converter` module for parsing and transforming agent/command markdown files
+  - Platform-agnostic source files in `agents/*.md` and `commands/*.md` with YAML frontmatter
+  - Provider-specific transformations (tools format conversion, provider-overrides merging)
+  - Automatic sync to Claude Code (`~/.claude/agents/`, `~/.claude/commands/`)
+  - Automatic sync to OpenCode (`~/.config/opencode/agent/`, `~/.config/opencode/command/`)
+  - Automatic sync to Codex (`~/.codex/prompts/` for commands)
+- Sample agents:
+  - `code-reviewer` - Expert code review specialist for quality, security, and performance
+- Sample commands:
+  - `/fix-issue` - Fix a coding issue following standards
+  - `/review-pull-request` - Review pull request for quality and security
+- Comprehensive test suite for agents-commands-converter module
 
 ### Changed
 
-- Enhanced `code-reviewer` agent description for clarity
-- Improved `/review-pull-request` command with better instructions and tool restrictions
-- Added `argument-hint` to `/fix-issue` command for better UX
-- Updated README.md with detailed agents and commands usage examples
+- Updated `PlatformConfig` interface to support `agentsDir` and `commandsDir` configuration
+- Enhanced installer sync logic to process and transform agents/commands per platform
+- Standardized frontmatter fields to use `kebab-case` (e.g., `argument-hint`, `allowed-tools`)
+- Removed unsupported `disabledTools` field from agent definitions
 
-### Documentation
+### Technical Details
 
-- Documented unified format specification for agents and commands
-- Added provider-specific translation requirements (Claude Code, OpenCode, Codex)
-- Created field mapping tables for cross-provider compatibility
-- Documented argument syntax patterns for each provider
+- **Transformations**: 
+  - Claude Code: Tools remain as comma-separated string
+  - OpenCode: Tools converted to object format (`{ read: true, grep: true }`)
+  - All platforms: `provider-overrides` merged into main frontmatter
+- **Frontmatter Support**: Flexible pass-through of all properties with required `name` and `description` fields
+- **Universal Placeholders**: Support for `$ARGUMENTS` and `$1`, `$2`, `$3` positional parameters in all providers
 
 ## 0.1.2
 
