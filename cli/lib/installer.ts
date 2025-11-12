@@ -46,6 +46,7 @@ interface SyncSkillsOptions {
 interface UpdateCheckResult {
   hasUpdate: boolean
   changelogUrl?: string
+  currentCommit?: string
 }
 
 export class Installer {
@@ -799,6 +800,21 @@ export class Installer {
     return rendered.trimEnd()
   }
 
+  private async getGitRevParse(ref: string, repoPath: string): Promise<string | null> {
+    try {
+      const cmd = new Deno.Command('git', {
+        args: ['rev-parse', ref],
+        cwd: repoPath,
+        stdout: 'piped',
+        stderr: 'null',
+      })
+      const result = await cmd.output()
+      return result.success ? new TextDecoder().decode(result.stdout).trim() : null
+    } catch {
+      return null
+    }
+  }
+
   async checkForUpdates(): Promise<UpdateCheckResult | null> {
     try {
       const repoPath = await this.resolveGitRepository()
@@ -825,40 +841,30 @@ export class Installer {
       const remoteBranch = await this.getDefaultRemoteBranch(repoPath)
 
       // Get remote commit hash
-      const remoteHashCmd = new Deno.Command('git', {
-        args: ['rev-parse', `origin/${remoteBranch}`],
-        cwd: repoPath,
-        stdout: 'piped',
-        stderr: 'null',
-      })
-      const remoteHashResult = await remoteHashCmd.output()
-      if (!remoteHashResult.success) {
+      const remoteHash = await this.getGitRevParse(`origin/${remoteBranch}`, repoPath)
+      if (!remoteHash) {
         // Remote branch doesn't exist, no update available
         return {
           hasUpdate: false,
         }
       }
-      // Check if remote is ahead
-      const revListCmd = new Deno.Command('git', {
-        args: ['rev-list', '--count', `HEAD..origin/${remoteBranch}`],
-        cwd: repoPath,
-        stdout: 'piped',
-        stderr: 'null',
-      })
-      const revListResult = await revListCmd.output()
 
-      if (revListResult.success) {
-        const commitsAhead = parseInt(new TextDecoder().decode(revListResult.stdout).trim())
-        const hasUpdate = commitsAhead > 0
-        const changelogUrl = hasUpdate ? await this.buildChangelogUrl(repoPath, remoteBranch) : undefined
-
-        return {
-          hasUpdate,
-          changelogUrl,
-        }
+      // Get current commit hash
+      const currentHash = await this.getGitRevParse('HEAD', repoPath)
+      if (!currentHash) {
+        return null
       }
 
-      return null
+      // Compare hashes to determine if there's an update
+      const hasUpdate = remoteHash !== currentHash
+      const currentCommit = currentHash.slice(0, 7)
+      const changelogUrl = hasUpdate ? await this.buildChangelogUrl(repoPath, remoteBranch) : undefined
+
+      return {
+        hasUpdate,
+        changelogUrl,
+        currentCommit,
+      }
     } catch (error) {
       // deno-lint-ignore no-explicit-any
       console.log('  ⚠ Update check failed:', (error as any)?.message)
@@ -1162,14 +1168,8 @@ export class Installer {
     // Try main first, then master
     const branches = ['main', 'master']
     for (const branch of branches) {
-      const cmd = new Deno.Command('git', {
-        args: ['rev-parse', '--verify', `origin/${branch}`],
-        cwd: repoPath,
-        stdout: 'null',
-        stderr: 'null',
-      })
-      const result = await cmd.output()
-      if (result.success) {
+      const hash = await this.getGitRevParse(`origin/${branch}`, repoPath)
+      if (hash) {
         return branch
       }
     }
