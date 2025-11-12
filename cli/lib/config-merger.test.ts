@@ -214,7 +214,7 @@ Deno.test('array-union: non-breaking managed additions are auto-applied without 
   const conflicts = merger.hasUserConflicts(base as unknown as Record<string, unknown>, user, managed, merged)
 
   // Should include both managed addition and user's custom entry
-  const mergedAllow = (merged.permissions as any).allow as string[]
+  const mergedAllow = (merged.permissions as Record<string, unknown>).allow as string[]
   assertEquals(
     new Set(mergedAllow),
     new Set(['Read', 'Write', 'Custom(TaskRun)', 'WebFetch(domain:n8n.stashaway.cloud/)']),
@@ -306,7 +306,7 @@ Deno.test('array-union: preserves user-only additions and treats managed-only ad
   const merged = merger.threeWayMerge(base as unknown as Record<string, unknown>, user, managed)
   const conflicts = merger.hasUserConflicts(base as unknown as Record<string, unknown>, user, managed, merged)
 
-  const mergedAllow = (merged.permissions as any).allow as string[]
+  const mergedAllow = (merged.permissions as Record<string, unknown>).allow as string[]
   assertEquals(new Set(mergedAllow), new Set(['Custom(TaskRun)', 'WebFetch(domain:n8n.stashaway.cloud/)']))
   assertEquals(conflicts, false)
 })

@@ -27,7 +27,7 @@
 
 ### Technical Details
 
-- **Transformations**: 
+- **Transformations**:
   - Claude Code: Tools remain as comma-separated string
   - OpenCode: Tools converted to object format (`{ read: true, grep: true }`)
   - All platforms: `provider-overrides` merged into main frontmatter

@@ -48,12 +48,12 @@ export function parseFrontmatter(content: string): ParsedContent | null {
 
 /**
  * Convert tools between different format types
- * 
+ *
  * Supported formats:
  * - 'string': Comma-separated (Claude, Codex) - "Read, Grep, Glob"
  * - 'object': Boolean map (OpenCode) - { read: true, grep: true, glob: true }
  * - 'array': Array of strings (future providers) - ["read", "grep", "glob"]
- * 
+ *
  * @param tools - Input tools in any supported format
  * @param targetFormat - Desired output format
  * @returns Converted tools in target format
@@ -103,7 +103,7 @@ export function convertTools(tools: unknown, targetFormat: ToolsFormat): unknown
  * - Merges provider-overrides into main frontmatter
  * - Transforms tools format to platform-specific format (if toolsFormat specified)
  * - Passes through all other properties unchanged
- * 
+ *
  * @param parsed - Parsed content with frontmatter and body
  * @param platform - Platform key (e.g., 'claude', 'opencode')
  * @param toolsFormat - Target tools format for this platform (from PlatformConfig)

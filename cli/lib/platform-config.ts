@@ -12,7 +12,7 @@ export interface PlatformConfig {
   pathReplacements?: Record<string, string>
   configFile?: string // Config filename (same in both user dir and repo)
   configMergeStrategy?: MergeStrategy[] // Custom merge strategy for this platform's config
-  
+
   // Agents & Commands support (file-based)
   agentsDir?: string // Subdirectory for agent files (e.g., 'agents', 'agent')
   commandsDir?: string // Subdirectory for command files (e.g., 'commands', 'command', 'prompts')

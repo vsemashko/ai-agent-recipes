@@ -1,10 +1,5 @@
 import { assertEquals, assertExists } from '@std/assert'
-import {
-  convertTools,
-  parseFrontmatter,
-  processContentForPlatform,
-  reconstructMarkdown,
-} from './agents-commands-converter.ts'
+import { convertTools, parseFrontmatter, processContentForPlatform, reconstructMarkdown } from './agents-commands-converter.ts'
 
 Deno.test('parseFrontmatter - valid agent', () => {
   const content = `---
@@ -443,4 +438,3 @@ Test agent body.`
   })
   assertEquals(final.frontmatter.name, 'e2e-agent')
 })
-

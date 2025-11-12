@@ -7,11 +7,7 @@ import { ConfigParserFactory } from './config-format.ts'
 import { type ConfigChange, ConfigMerger } from './config-merger.ts'
 import { StateManager } from './state-manager.ts'
 import { PLATFORM_CONFIGS } from './platform-config.ts'
-import {
-  parseFrontmatter,
-  processContentForPlatform,
-  reconstructMarkdown,
-} from './agents-commands-converter.ts'
+import { parseFrontmatter, processContentForPlatform, reconstructMarkdown } from './agents-commands-converter.ts'
 
 export interface InstallConfig {
   version: string
@@ -293,10 +289,10 @@ export class Installer {
       }
     }
 
-    const changedPlatforms = summaries.filter((summary) => 
-      summary.fileChanges.length > 0 || 
-      summary.skillUpdates > 0 || 
-      summary.agentUpdates > 0 || 
+    const changedPlatforms = summaries.filter((summary) =>
+      summary.fileChanges.length > 0 ||
+      summary.skillUpdates > 0 ||
+      summary.agentUpdates > 0 ||
       summary.commandUpdates > 0
     )
 
@@ -429,7 +425,7 @@ export class Installer {
             const content = await this.processAgentFile(sourcePath, platformKey)
             const targetPath = join(agentsTarget, entry.name)
             await Deno.writeTextFile(targetPath, content)
-            
+
             agentFilenames.push(entry.name)
             summary.agentUpdates++
             this.logVerbose(`    ✓ Synced agent: ${entry.name}`)
@@ -459,7 +455,7 @@ export class Installer {
             const content = await this.processCommandFile(sourcePath, platformKey)
             const targetPath = join(commandsTarget, entry.name)
             await Deno.writeTextFile(targetPath, content)
-            
+
             commandFilenames.push(entry.name)
             summary.commandUpdates++
             this.logVerbose(`    ✓ Synced command: ${entry.name}`)

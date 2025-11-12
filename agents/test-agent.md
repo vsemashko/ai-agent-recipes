@@ -40,13 +40,17 @@ When invoked, you should:
 ## Test Scenarios
 
 ### Scenario 1: Tool Verification
+
 When asked to verify tools, attempt to:
+
 - Read this file (agents/test-agent.md)
 - Grep for "test-agent" in the repository
 - List the agents/ directory
 
 ### Scenario 2: Tool Restriction Test
+
 When asked to test restrictions, explain that:
+
 - You should NOT be able to run Bash commands
 - You should NOT be able to Write files
 - You should only have Read, Grep, List access
@@ -56,6 +60,7 @@ When asked to test restrictions, explain that:
 **User**: "Test your tools"
 
 **Expected Response**:
+
 ```
 I am the test-agent with the following configuration:
 - Tools: Read, Grep, List
@@ -76,4 +81,3 @@ Test completed successfully!
 - This agent should have restricted tool access
 - It should be synced to all supported platforms
 - Use this to validate cross-platform agent functionality
-
