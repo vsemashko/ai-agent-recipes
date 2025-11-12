@@ -1095,6 +1095,15 @@ export class Installer {
     return `${changes.length} change(s): ${summary.join(', ')}`
   }
 
+  /**
+   * Checks if a given path is the agent-recipes repository
+   * by verifying the git remote URL
+   */
+  private async isAgentRecipesRepository(repoPath: string): Promise<boolean> {
+    const remoteUrl = await this.getRemoteUrl(repoPath)
+    return remoteUrl ? remoteUrl.includes('stashaway-agent-recipes') : false
+  }
+
   private async getDefaultRemoteBranch(repoPath: string): Promise<string> {
     // Check if a source branch was detected during installation
     const sourceBranch = Deno.env.get('AGENT_RECIPES_SOURCE_BRANCH')
@@ -1103,26 +1112,32 @@ export class Installer {
       return sourceBranch
     }
 
-    try {
-      // Check current branch of the repo
-      const currentBranchCmd = new Deno.Command('git', {
-        args: ['branch', '--show-current'],
-        cwd: repoPath,
-        stdout: 'piped',
-        stderr: 'null',
-      })
-      const currentBranchResult = await currentBranchCmd.output()
+    // Only check current branch if repoPath is actually the agent-recipes repository
+    // This prevents picking up branches from unrelated repositories
+    const isAgentRecipesRepo = await this.isAgentRecipesRepository(repoPath)
 
-      if (currentBranchResult.success) {
-        const currentBranch = new TextDecoder().decode(currentBranchResult.stdout).trim()
-        // If on a non-default branch, use it for updates
-        if (currentBranch && currentBranch !== 'main' && currentBranch !== 'master') {
-          console.log(`  ℹ Using current branch: ${currentBranch}`)
-          return currentBranch
+    if (isAgentRecipesRepo) {
+      try {
+        // Check current branch of the repo
+        const currentBranchCmd = new Deno.Command('git', {
+          args: ['branch', '--show-current'],
+          cwd: repoPath,
+          stdout: 'piped',
+          stderr: 'null',
+        })
+        const currentBranchResult = await currentBranchCmd.output()
+
+        if (currentBranchResult.success) {
+          const currentBranch = new TextDecoder().decode(currentBranchResult.stdout).trim()
+          // If on a non-default branch, use it for updates
+          if (currentBranch && currentBranch !== 'main' && currentBranch !== 'master') {
+            console.log(`  ℹ Using current branch: ${currentBranch}`)
+            return currentBranch
+          }
         }
+      } catch {
+        // Ignore errors
       }
-    } catch {
-      // Ignore errors
     }
 
     try {
