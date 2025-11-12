@@ -1,13 +1,14 @@
 # StashAway Agent Recipes
 
-A centralized repository for reusable configurations, instructions, and skills for AI coding agents (Claude Code, Codex CLI, and more).
+A centralized repository for reusable configurations, instructions, skills, agents, and slash commands for AI coding assistants (Claude Code,
+OpenCode, Codex CLI).
 
 ## 🎯 What is This?
 
 Agent Recipes makes it easy to:
 
 - 🤖 Configure AI coding assistants with StashAway's standards and best practices
-- 🔧 Share reusable skills across your team
+- 🔧 Share reusable skills, agents, and slash commands across your team
 - 📚 Maintain consistent AI agent behavior across projects
 - 🚀 Get new team members productive with AI tools quickly
 
@@ -67,24 +68,43 @@ To use a skill, simply ask Claude naturally:
 "Create a commit for these changes"
 ```
 
+### Using Agents & Slash Commands
+
+**Agents** are sub-agents with specialized expertise. They automatically get invoked based on context or you can explicitly request them:
+
+```
+"Can you review this code?" (uses code-reviewer agent)
+"Switch to the code-reviewer agent and check this PR"
+```
+
+**Slash Commands** are quick prompts with arguments:
+
+```
+/fix-issue 123                    # Fix issue #123
+/review-pull-request 456 high     # Review PR #456 with high priority
+```
+
+Available agents and commands are synced to your AI tool and discovered automatically. Browse the `agents/` and `commands/` directories to see what's
+available.
+
 ## 🛠️ Supported AI Tools
 
 ### Claude Code
 
 - **Location**: `~/.claude/`
-- **Format**: Global instructions (CLAUDE.md) + skills directory
+- **Format**: Global instructions (CLAUDE.md, AGENTS.md) + skills, agents, and commands
+- **Setup**: Automatic via `agent-recipes sync`
+
+### OpenCode
+
+- **Location**: `~/.config/opencode/`
+- **Format**: AGENTS.md with embedded instructions + skills, agents, and commands
 - **Setup**: Automatic via `agent-recipes sync`
 
 ### Codex CLI
 
 - **Location**: `~/.codex/`
-- **Format**: AGENTS.md with embedded instructions + skills
-- **Setup**: Automatic via `agent-recipes sync`
-
-### OpenCode
-
-- **Location**: `~/.opencode/`
-- **Format**: AGENTS.md with embedded instructions + skills
+- **Format**: AGENTS.md with embedded instructions + skills and commands
 - **Setup**: Automatic via `agent-recipes sync`
 
 ## 🔄 Keeping Up to Date
@@ -105,18 +125,31 @@ agent-recipes sync
 
 ### For Claude Code Users
 
-- Global instructions → `~/.claude/CLAUDE.md`
+- Global instructions → `~/.claude/CLAUDE.md` and `~/.claude/AGENTS.md`
 - Skills directory → `~/.claude/skills/` (managed copies with `sa-` prefix)
+- Agents directory → `~/.claude/agents/` (sub-agents for specialized tasks)
+- Commands directory → `~/.claude/commands/` (slash commands with arguments)
+- Settings → `~/.claude/settings.json` (merged with user settings)
+
+### For OpenCode Users
+
+- Instructions → `~/.config/opencode/AGENTS.md` (auto-generated from instructions + skills)
+- Agents directory → `~/.config/opencode/agent/` (sub-agents for specialized tasks)
+- Commands directory → `~/.config/opencode/command/` (slash commands with arguments)
+- Config → `~/.config/opencode/opencode.json` (merged with user config)
 
 ### For Codex CLI Users
 
-- Combined file → `~/.codex/AGENTS.md` (auto-generated from instructions + skills)
+- Instructions → `~/.codex/AGENTS.md` (auto-generated from instructions + skills)
+- Commands directory → `~/.codex/prompts/` (slash commands with arguments)
+- Config → `~/.codex/config.toml` (merged with user config)
 
 ### CLI Tool
 
 - Installed to `~/.stashaway-agent-recipes/`
 - Binary at `~/.stashaway-agent-recipes/bin/agent-recipes`
 - Added to your PATH automatically
+- State tracking → `~/.stashaway-agent-recipes/state.json` (for config merging)
 
 ## ✏️ Customizing
 
@@ -188,60 +221,14 @@ cp -r ~/.claude/skills/sa-rightsize ~/.claude/skills/rightsize
 
 ## 🤝 Contributing
 
-We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for:
+We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed information on:
 
-- How to add new skills
-- Development setup
-- Testing guidelines
-- Code style guide
+- How to add new skills, agents, and slash commands
+- Development setup and workflow
+- Testing guidelines and code style
+- Versioning and release process
 
-Quick overview:
+Quick links:
 
-1. Create a feature branch: `<type>/<ticket>-<description>`
-
-### Versioning & Releases
-
-- Project version lives in `deno.json` (and powers the CLI `--version` flag).
-- Run `deno task release` to cut a release:
-  1. Lints/tests the repo (unless `--skip-tests`)
-  2. Prompts for the next semver (patch/minor/major)
-  3. Inserts a new `CHANGELOG.md` section seeded from git commits (you can edit it in your `$EDITOR`)
-  4. Updates `deno.json`, and if you're on `main`, commits + tags `Release <version>` (feature branches skip the commit/tag so you can land changes
-     via MR).
-- After running on `main`, push the branch & tags: `git push && git push --tags`.
-- When running from a feature branch, review and commit `deno.json` + `CHANGELOG.md` as part of your merge request, then tag the release on `main`
-  once merged.
-
-2. Add your skill in `skills/sa-my-skill/SKILL.md` (keep the `name` field without the prefix)
-3. Test with `agent-recipes sync`
-4. Submit a merge request
-
-## 🐛 Troubleshooting
-
-### CLI not found after installation
-
-```bash
-source ~/.zshrc  # or ~/.bashrc
-# Or manually add to PATH
-export PATH="$PATH:$HOME/.stashaway-agent-recipes/bin"
-```
-
-### Skills not showing up in Claude Code
-
-```bash
-agent-recipes sync
-ls ~/.claude/skills/
-```
-
-### AGENTS.md not updating for Codex
-
-```bash
-agent-recipes sync
-cat ~/.codex/AGENTS.md
-```
-
-## 🙋 Support
-
-- **Slack**: #agent-recipes (to be created)
-- **Issues**: [GitLab Issues](https://gitlab.stashaway.com/vladimir.semashko/stashaway-agent-recipes/-/issues)
-- **Documentation**: This README and [CONTRIBUTING.md](./CONTRIBUTING.md)
+- [AGENTS.md](./AGENTS.md) - Development instructions & architecture
+- [CHANGELOG.md](./CHANGELOG.md) - Release history
