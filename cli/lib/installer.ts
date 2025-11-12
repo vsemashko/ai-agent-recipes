@@ -422,16 +422,22 @@ export class Installer {
         const agentsTarget = join(targetDir, config.agentsDir)
         await Deno.mkdir(agentsTarget, { recursive: true })
 
+        const agentFilenames: string[] = []
         for await (const entry of Deno.readDir(agentsSource)) {
           if (entry.isFile && entry.name.endsWith('.md')) {
             const sourcePath = join(agentsSource, entry.name)
             const content = await this.processAgentFile(sourcePath, platformKey)
             const targetPath = join(agentsTarget, entry.name)
             await Deno.writeTextFile(targetPath, content)
+            
+            agentFilenames.push(entry.name)
             summary.agentUpdates++
             this.logVerbose(`    ✓ Synced agent: ${entry.name}`)
           }
         }
+
+        // Track synced agent filenames in state for future change detection
+        this.stateManager.setTrackedAgents(platformKey, agentFilenames)
 
         if (summary.agentUpdates > 0) {
           this.logVerbose(`  ✓ Synced ${summary.agentUpdates} agent(s)`)
@@ -446,16 +452,22 @@ export class Installer {
         const commandsTarget = join(targetDir, config.commandsDir)
         await Deno.mkdir(commandsTarget, { recursive: true })
 
+        const commandFilenames: string[] = []
         for await (const entry of Deno.readDir(commandsSource)) {
           if (entry.isFile && entry.name.endsWith('.md')) {
             const sourcePath = join(commandsSource, entry.name)
             const content = await this.processCommandFile(sourcePath, platformKey)
             const targetPath = join(commandsTarget, entry.name)
             await Deno.writeTextFile(targetPath, content)
+            
+            commandFilenames.push(entry.name)
             summary.commandUpdates++
             this.logVerbose(`    ✓ Synced command: ${entry.name}`)
           }
         }
+
+        // Track synced command filenames in state for future change detection
+        this.stateManager.setTrackedCommands(platformKey, commandFilenames)
 
         if (summary.commandUpdates > 0) {
           this.logVerbose(`  ✓ Synced ${summary.commandUpdates} command(s)`)

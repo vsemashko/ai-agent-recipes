@@ -17,6 +17,20 @@ export interface ConfigState {
   configs: Record<string, Record<string, Record<string, unknown>>>
 
   /**
+   * Last synced agent filenames for each platform
+   * Key: platform name (e.g., "claude", "codex", "opencode")
+   * Value: array of agent filenames (e.g., ["code-reviewer.md", "test-agent.md"])
+   */
+  agents?: Record<string, string[]>
+
+  /**
+   * Last synced command filenames for each platform
+   * Key: platform name (e.g., "claude", "codex", "opencode")
+   * Value: array of command filenames (e.g., ["fix-issue.md", "test.md"])
+   */
+  commands?: Record<string, string[]>
+
+  /**
    * Last installed recipes version (deno.json version)
    */
   recipesVersion?: string | null
@@ -64,6 +78,8 @@ export class StateManager {
     // Return empty state if file doesn't exist or load failed
     this.state = {
       configs: {},
+      agents: {},
+      commands: {},
       recipesVersion: null,
       lastSync: new Date().toISOString(),
       version: '1.0',
@@ -182,6 +198,8 @@ export class StateManager {
   clear(): void {
     this.state = {
       configs: {},
+      agents: {},
+      commands: {},
       recipesVersion: null,
       lastSync: new Date().toISOString(),
       version: '1.0',
@@ -197,5 +215,87 @@ export class StateManager {
     }
 
     return this.state.lastSync
+  }
+
+  // ============================================================================
+  // Agents Management
+  // ============================================================================
+
+  /**
+   * Get all tracked agent filenames for a platform
+   */
+  getTrackedAgents(platform: string): string[] {
+    if (!this.state) {
+      throw new Error('State not loaded. Call load() first.')
+    }
+
+    return this.state.agents?.[platform] ?? []
+  }
+
+  /**
+   * Set tracked agent filenames for a platform
+   */
+  setTrackedAgents(platform: string, filenames: string[]): void {
+    if (!this.state) {
+      throw new Error('State not loaded. Call load() first.')
+    }
+
+    if (!this.state.agents) {
+      this.state.agents = {}
+    }
+
+    this.state.agents[platform] = filenames
+  }
+
+  /**
+   * Check if any agents are tracked for a platform
+   */
+  hasTrackedAgents(platform: string): boolean {
+    if (!this.state) {
+      throw new Error('State not loaded. Call load() first.')
+    }
+
+    return (this.state.agents?.[platform]?.length ?? 0) > 0
+  }
+
+  // ============================================================================
+  // Commands Management
+  // ============================================================================
+
+  /**
+   * Get all tracked command filenames for a platform
+   */
+  getTrackedCommands(platform: string): string[] {
+    if (!this.state) {
+      throw new Error('State not loaded. Call load() first.')
+    }
+
+    return this.state.commands?.[platform] ?? []
+  }
+
+  /**
+   * Set tracked command filenames for a platform
+   */
+  setTrackedCommands(platform: string, filenames: string[]): void {
+    if (!this.state) {
+      throw new Error('State not loaded. Call load() first.')
+    }
+
+    if (!this.state.commands) {
+      this.state.commands = {}
+    }
+
+    this.state.commands[platform] = filenames
+  }
+
+  /**
+   * Check if any commands are tracked for a platform
+   */
+  hasTrackedCommands(platform: string): boolean {
+    if (!this.state) {
+      throw new Error('State not loaded. Call load() first.')
+    }
+
+    return (this.state.commands?.[platform]?.length ?? 0) > 0
   }
 }
