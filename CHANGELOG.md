@@ -1,38 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.1.3
 
-### Added
-
-- **Multi-provider agents and commands sync system**
-  - New `agents-commands-converter` module for parsing and transforming agent/command markdown files
-  - Platform-agnostic source files in `agents/*.md` and `commands/*.md` with YAML frontmatter
-  - Provider-specific transformations (tools format conversion, provider-overrides merging)
-  - Automatic sync to Claude Code (`~/.claude/agents/`, `~/.claude/commands/`)
-  - Automatic sync to OpenCode (`~/.config/opencode/agent/`, `~/.config/opencode/command/`)
-  - Automatic sync to Codex (`~/.codex/prompts/` for commands)
-- Sample agents:
-  - `code-reviewer` - Expert code review specialist for quality, security, and performance
-- Sample commands:
-  - `/fix-issue` - Fix a coding issue following standards
-  - `/review-pull-request` - Review pull request for quality and security
-- Comprehensive test suite for agents-commands-converter module
-
-### Changed
-
-- Updated `PlatformConfig` interface to support `agentsDir` and `commandsDir` configuration
-- Enhanced installer sync logic to process and transform agents/commands per platform
-- Standardized frontmatter fields to use `kebab-case` (e.g., `argument-hint`, `allowed-tools`)
-- Removed unsupported `disabledTools` field from agent definitions
-
-### Technical Details
-
-- **Transformations**:
-  - Claude Code: Tools remain as comma-separated string
-  - OpenCode: Tools converted to object format (`{ read: true, grep: true }`)
-  - All platforms: `provider-overrides` merged into main frontmatter
-- **Frontmatter Support**: Flexible pass-through of all properties with required `name` and `description` fields
-- **Universal Placeholders**: Support for `$ARGUMENTS` and `$1`, `$2`, `$3` positional parameters in all providers
+- feat: SA-665 integrate agents and commands sync
+   - add subagents and slash commands sync 
+   - use standardized Markdown with YAML frontmatter format, that is converted to tool specific ones
+   - add configs for opencode
 
 ## 0.1.2
 
