@@ -238,7 +238,10 @@ export class Installer {
     for (const candidate of this.getRepositoryCandidates()) {
       try {
         if (await exists(join(candidate, '.git'))) {
-          return candidate
+          // Verify this is actually the stashaway-agent-recipes repository
+          if (await this.isAgentRecipesRepository(candidate)) {
+            return candidate
+          }
         }
       } catch {
         // Ignore and continue checking other candidates
