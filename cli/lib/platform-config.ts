@@ -14,7 +14,7 @@ export const PLATFORM_CONFIGS: Record<string, PlatformConfig> = {
     name: 'Claude Code',
     dir: '.claude',
     // No skillsFormat = skills copied as-is to separate directory (no conversion, no embedding)
-    configFile: 'config.json',
+    configFile: 'settings.json',
   },
 
   'codex': {

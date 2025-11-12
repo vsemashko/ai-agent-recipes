@@ -140,6 +140,17 @@ export class ConfigMerger {
       const baseValue = this.getValueAtSegments(base, segments)
       const userHasValue = userValue !== undefined
 
+      // Build a keyPath in the same style as mergeThreeWay
+      const keyPath = segments.join('.')
+
+      // Special-case arrays that use array-union: only flag real conflicts
+      const mode = this.getMergeMode(keyPath)
+      if (mode === 'array-union' && Array.isArray(mergedValue)) {
+        const conflict = this.arrayUnionHasConflict(baseValue, userValue, managedValue, mergedValue)
+        if (conflict) return true
+        continue
+      }
+
       // First sync: warn only if user has a conflicting value
       if (!base) {
         if (userHasValue && !this.deepEqual(userValue, managedValue)) {
@@ -160,6 +171,49 @@ export class ConfigMerger {
     }
 
     return false
+  }
+
+  /**
+   * Determine if an array-union merge introduced a real conflict.
+   * Conflicts only when:
+   * - The merge removes any user values, or
+   * - It reintroduces items the user removed while the team still had them.
+   */
+  private arrayUnionHasConflict(
+    baseValue: unknown,
+    userValue: unknown,
+    managedValue: unknown,
+    mergedValue: unknown,
+  ): boolean {
+    const userArr = Array.isArray(userValue) ? (userValue as unknown[]) : []
+    const baseArr = Array.isArray(baseValue) ? (baseValue as unknown[]) : []
+    const managedArr = Array.isArray(managedValue) ? (managedValue as unknown[]) : []
+    const mergedArr = Array.isArray(mergedValue) ? (mergedValue as unknown[]) : []
+
+    const userSet = this.toNormalizedSet(userArr)
+    const baseSet = this.toNormalizedSet(baseArr)
+    const managedSet = this.toNormalizedSet(managedArr)
+    const mergedSet = this.toNormalizedSet(mergedArr)
+
+    // If merge removed any user entries → conflict
+    for (const v of userSet) {
+      if (!mergedSet.has(v)) return true
+    }
+
+    // If user intentionally removed something from base, but team still has it
+    // and the merge reintroduces it → conflict
+    for (const v of baseSet) {
+      const userRemoved = !userSet.has(v)
+      const teamStillHas = managedSet.has(v)
+      const mergeReintroduced = mergedSet.has(v)
+      if (userRemoved && teamStillHas && mergeReintroduced) return true
+    }
+
+    return false
+  }
+
+  private toNormalizedSet(arr: unknown[]): Set<string> {
+    return new Set(arr.map((v) => this.normalizeForComparison(v)))
   }
 
   /**

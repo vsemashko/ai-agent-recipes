@@ -8,6 +8,18 @@ This file contains instructions for working on the StashAway Agent Recipes repos
 
 **Purpose**: Centralized repository for reusable AI agent configurations, instructions, skills, and tools for StashAway engineering teams.
 
+## Important Context
+
+**When working in this repository, assume all discussions about creating agents, skills, or updating configs refer to modifying THIS repository** (stashaway-agent-recipes), not user projects.
+
+For example:
+- "Create a new skill" → Add a skill to `skills/sa-*/` in this repo
+- "Update the config" → Modify files in `instructions/{platform}/{config_file}`
+- "Add agent instructions" → Update templates in `instructions/` or `instructions/GLOBAL_INSTRUCTIONS.md`
+- "Modify templates" → Edit `.eta` files in `instructions/{platform}/`
+
+These changes will be distributed to all users when they run `agent-recipes sync`.
+
 ## Technology Stack
 
 - **Runtime**: Deno 2.x

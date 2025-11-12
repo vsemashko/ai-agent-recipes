@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Created comprehensive plan for multi-provider agents and commands support (PLAN_SUBAGENTS_CLAUDE.md)
+- Added new sample agents:
+  - `documentation-writer` - Technical documentation specialist
+- Added new sample commands:
+  - `/refactor` - Refactor code following best practices
+  - `/test-gen` - Generate comprehensive tests
+
+### Changed
+
+- Enhanced `code-reviewer` agent description for clarity
+- Improved `/review-pull-request` command with better instructions and tool restrictions
+- Added `argument-hint` to `/fix-issue` command for better UX
+- Updated README.md with detailed agents and commands usage examples
+
+### Documentation
+
+- Documented unified format specification for agents and commands
+- Added provider-specific translation requirements (Claude Code, OpenCode, Codex)
+- Created field mapping tables for cross-provider compatibility
+- Documented argument syntax patterns for each provider
+
 ## 0.1.2
 
 - feat: SA-665 Exclude skills scripts from deno linting

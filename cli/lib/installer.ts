@@ -196,6 +196,11 @@ export class Installer {
 
   private getRepositoryCandidates(): string[] {
     const candidates = new Set<string>()
+
+    // Prioritize current working directory (for dev mode)
+    const cwd = Deno.cwd()
+    candidates.add(cwd)
+
     if (this.installDir) {
       candidates.add(join(this.installDir, 'repo'))
       candidates.add(this.installDir)

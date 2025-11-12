@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allowedTools": [
+      "Bash(curl https://rightsize-api.production.stashaway.sg/*)",
+      "WebFetch(domain:rightsize-api.production.stashaway.sg)",
+      "WebFetch(domain:n8n.stashaway.cloud/)",
+      "WebFetch(domain:gitlab.stashaway.com)"
+    ]
+  }
+}
