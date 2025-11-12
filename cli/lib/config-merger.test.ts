@@ -188,3 +188,125 @@ Deno.test('managed deletions keep user edits on formerly managed leaves', () => 
     },
   })
 })
+
+Deno.test('array-union: non-breaking managed additions are auto-applied without conflicts', () => {
+  const merger = new ConfigMerger()
+
+  const base = {
+    permissions: {
+      allow: ['Read', 'Write'],
+    },
+  }
+
+  const user = {
+    permissions: {
+      allow: ['Read', 'Write', 'Custom(TaskRun)'],
+    },
+  }
+
+  const managed = {
+    permissions: {
+      allow: ['Read', 'Write', 'WebFetch(domain:n8n.stashaway.cloud/)'],
+    },
+  }
+
+  const merged = merger.threeWayMerge(base as unknown as Record<string, unknown>, user, managed)
+  const conflicts = merger.hasUserConflicts(base as unknown as Record<string, unknown>, user, managed, merged)
+
+  // Should include both managed addition and user's custom entry
+  const mergedAllow = (merged.permissions as Record<string, unknown>).allow as string[]
+  assertEquals(
+    new Set(mergedAllow),
+    new Set(['Read', 'Write', 'Custom(TaskRun)', 'WebFetch(domain:n8n.stashaway.cloud/)']),
+  )
+  // And should not be flagged as conflict
+  assertEquals(conflicts, false)
+})
+
+Deno.test('array-union: reintroducing a user-removed managed item is a conflict', () => {
+  const merger = new ConfigMerger()
+
+  const base = {
+    permissions: {
+      allow: ['Read', 'Write'],
+    },
+  }
+
+  // User removed 'Write'
+  const user = {
+    permissions: {
+      allow: ['Read'],
+    },
+  }
+
+  // Team still has 'Write' (not deleted by team)
+  const managed = {
+    permissions: {
+      allow: ['Read', 'Write'],
+    },
+  }
+
+  const merged = merger.threeWayMerge(base as unknown as Record<string, unknown>, user, managed)
+  const conflicts = merger.hasUserConflicts(base as unknown as Record<string, unknown>, user, managed, merged)
+
+  // Merge reintroduces 'Write' which user intentionally removed → conflict
+  assertEquals(conflicts, true)
+})
+
+Deno.test('array-union: team deletion matching user removal is not a conflict', () => {
+  const merger = new ConfigMerger()
+
+  const base = {
+    permissions: {
+      allow: ['Read', 'Write'],
+    },
+  }
+
+  // User removed 'Write'
+  const user = {
+    permissions: {
+      allow: ['Read'],
+    },
+  }
+
+  // Team also removed 'Write'
+  const managed = {
+    permissions: {
+      allow: ['Read'],
+    },
+  }
+
+  const merged = merger.threeWayMerge(base as unknown as Record<string, unknown>, user, managed)
+  const conflicts = merger.hasUserConflicts(base as unknown as Record<string, unknown>, user, managed, merged)
+
+  assertEquals(conflicts, false)
+})
+
+Deno.test('array-union: preserves user-only additions and treats managed-only additions as non-conflicts', () => {
+  const merger = new ConfigMerger()
+
+  const base = {
+    permissions: {
+      allow: [],
+    },
+  }
+
+  const user = {
+    permissions: {
+      allow: ['Custom(TaskRun)'],
+    },
+  }
+
+  const managed = {
+    permissions: {
+      allow: ['WebFetch(domain:n8n.stashaway.cloud/)'],
+    },
+  }
+
+  const merged = merger.threeWayMerge(base as unknown as Record<string, unknown>, user, managed)
+  const conflicts = merger.hasUserConflicts(base as unknown as Record<string, unknown>, user, managed, merged)
+
+  const mergedAllow = (merged.permissions as Record<string, unknown>).allow as string[]
+  assertEquals(new Set(mergedAllow), new Set(['Custom(TaskRun)', 'WebFetch(domain:n8n.stashaway.cloud/)']))
+  assertEquals(conflicts, false)
+})

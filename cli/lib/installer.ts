@@ -7,6 +7,7 @@ import { ConfigParserFactory } from './config-format.ts'
 import { type ConfigChange, ConfigMerger } from './config-merger.ts'
 import { StateManager } from './state-manager.ts'
 import { PLATFORM_CONFIGS } from './platform-config.ts'
+import { parseFrontmatter, processContentForPlatform, reconstructMarkdown } from './agents-commands-converter.ts'
 
 export interface InstallConfig {
   version: string
@@ -34,6 +35,8 @@ interface PlatformSyncSummary {
   name: string
   fileChanges: ManagedFileChange[]
   skillUpdates: number
+  agentUpdates: number
+  commandUpdates: number
 }
 
 interface SyncSkillsOptions {
@@ -43,6 +46,7 @@ interface SyncSkillsOptions {
 interface UpdateCheckResult {
   hasUpdate: boolean
   changelogUrl?: string
+  currentCommit?: string
 }
 
 export class Installer {
@@ -196,6 +200,11 @@ export class Installer {
 
   private getRepositoryCandidates(): string[] {
     const candidates = new Set<string>()
+
+    // Prioritize current working directory (for dev mode)
+    const cwd = Deno.cwd()
+    candidates.add(cwd)
+
     if (this.installDir) {
       candidates.add(join(this.installDir, 'repo'))
       candidates.add(this.installDir)
@@ -229,7 +238,10 @@ export class Installer {
     for (const candidate of this.getRepositoryCandidates()) {
       try {
         if (await exists(join(candidate, '.git'))) {
-          return candidate
+          // Verify this is actually the stashaway-agent-recipes repository
+          if (await this.isAgentRecipesRepository(candidate)) {
+            return candidate
+          }
         }
       } catch {
         // Ignore and continue checking other candidates
@@ -281,7 +293,12 @@ export class Installer {
       }
     }
 
-    const changedPlatforms = summaries.filter((summary) => summary.fileChanges.length > 0 || summary.skillUpdates > 0)
+    const changedPlatforms = summaries.filter((summary) =>
+      summary.fileChanges.length > 0 ||
+      summary.skillUpdates > 0 ||
+      summary.agentUpdates > 0 ||
+      summary.commandUpdates > 0
+    )
 
     if (changedPlatforms.length > 0) {
       console.log('📝 Instructions updated:')
@@ -296,8 +313,15 @@ export class Installer {
         }
 
         if (summary.skillUpdates > 0) {
-          const label = summary.skillUpdates === 1 ? 'skill' : 'skills'
-          parts.push(`synced ${summary.skillUpdates} managed ${label}`)
+          parts.push(`synced ${summary.skillUpdates} managed skill(s)`)
+        }
+
+        if (summary.agentUpdates > 0) {
+          parts.push(`synced ${summary.agentUpdates} agents(s)`)
+        }
+
+        if (summary.commandUpdates > 0) {
+          parts.push(`synced ${summary.commandUpdates} command(s)`)
         }
 
         console.log(`  • ${summary.name}: ${parts.join('; ')}`)
@@ -326,6 +350,8 @@ export class Installer {
       name: config.name,
       fileChanges: [],
       skillUpdates: 0,
+      agentUpdates: 0,
+      commandUpdates: 0,
     }
 
     // Build template data
@@ -389,7 +415,105 @@ export class Installer {
       })
     }
 
+    // Sync agents directory
+    if (config.agentsDir) {
+      const agentsSource = join(repoRoot, 'agents')
+      if (await exists(agentsSource)) {
+        const agentsTarget = join(targetDir, config.agentsDir)
+        await Deno.mkdir(agentsTarget, { recursive: true })
+
+        const agentFilenames: string[] = []
+        for await (const entry of Deno.readDir(agentsSource)) {
+          if (entry.isFile && entry.name.endsWith('.md')) {
+            const sourcePath = join(agentsSource, entry.name)
+            const content = await this.processAgentFile(sourcePath, platformKey)
+            const targetPath = join(agentsTarget, entry.name)
+            await Deno.writeTextFile(targetPath, content)
+
+            agentFilenames.push(entry.name)
+            summary.agentUpdates++
+            this.logVerbose(`    ✓ Synced agent: ${entry.name}`)
+          }
+        }
+
+        // Track synced agent filenames in state for future change detection
+        this.stateManager.setTrackedAgents(platformKey, agentFilenames)
+
+        if (summary.agentUpdates > 0) {
+          this.logVerbose(`  ✓ Synced ${summary.agentUpdates} agent(s)`)
+        }
+      }
+    }
+
+    // Sync commands directory
+    if (config.commandsDir) {
+      const commandsSource = join(repoRoot, 'commands')
+      if (await exists(commandsSource)) {
+        const commandsTarget = join(targetDir, config.commandsDir)
+        await Deno.mkdir(commandsTarget, { recursive: true })
+
+        const commandFilenames: string[] = []
+        for await (const entry of Deno.readDir(commandsSource)) {
+          if (entry.isFile && entry.name.endsWith('.md')) {
+            const sourcePath = join(commandsSource, entry.name)
+            const content = await this.processCommandFile(sourcePath, platformKey)
+            const targetPath = join(commandsTarget, entry.name)
+            await Deno.writeTextFile(targetPath, content)
+
+            commandFilenames.push(entry.name)
+            summary.commandUpdates++
+            this.logVerbose(`    ✓ Synced command: ${entry.name}`)
+          }
+        }
+
+        // Track synced command filenames in state for future change detection
+        this.stateManager.setTrackedCommands(platformKey, commandFilenames)
+
+        if (summary.commandUpdates > 0) {
+          this.logVerbose(`  ✓ Synced ${summary.commandUpdates} command(s)`)
+        }
+      }
+    }
+
     return summary
+  }
+
+  /**
+   * Process agent file for specific platform
+   * Applies platform-specific transformations
+   */
+  private async processAgentFile(filePath: string, platformKey: string): Promise<string> {
+    const content = await Deno.readTextFile(filePath)
+    const parsed = parseFrontmatter(content)
+
+    if (!parsed) {
+      // Invalid format, return as-is
+      return content
+    }
+
+    const config = PLATFORM_CONFIGS[platformKey]
+    const processed = processContentForPlatform(parsed, platformKey, config?.toolsFormat)
+
+    return reconstructMarkdown(processed.frontmatter, processed.body)
+  }
+
+  /**
+   * Process command file for specific platform
+   * Applies platform-specific transformations
+   */
+  private async processCommandFile(filePath: string, platformKey: string): Promise<string> {
+    const content = await Deno.readTextFile(filePath)
+    const parsed = parseFrontmatter(content)
+
+    if (!parsed) {
+      // Invalid format, return as-is
+      return content
+    }
+
+    const config = PLATFORM_CONFIGS[platformKey]
+    const processed = processContentForPlatform(parsed, platformKey, config?.toolsFormat)
+
+    return reconstructMarkdown(processed.frontmatter, processed.body)
   }
 
   /**
@@ -679,6 +803,21 @@ export class Installer {
     return rendered.trimEnd()
   }
 
+  private async getGitRevParse(ref: string, repoPath: string): Promise<string | null> {
+    try {
+      const cmd = new Deno.Command('git', {
+        args: ['rev-parse', ref],
+        cwd: repoPath,
+        stdout: 'piped',
+        stderr: 'null',
+      })
+      const result = await cmd.output()
+      return result.success ? new TextDecoder().decode(result.stdout).trim() : null
+    } catch {
+      return null
+    }
+  }
+
   async checkForUpdates(): Promise<UpdateCheckResult | null> {
     try {
       const repoPath = await this.resolveGitRepository()
@@ -705,40 +844,30 @@ export class Installer {
       const remoteBranch = await this.getDefaultRemoteBranch(repoPath)
 
       // Get remote commit hash
-      const remoteHashCmd = new Deno.Command('git', {
-        args: ['rev-parse', `origin/${remoteBranch}`],
-        cwd: repoPath,
-        stdout: 'piped',
-        stderr: 'null',
-      })
-      const remoteHashResult = await remoteHashCmd.output()
-      if (!remoteHashResult.success) {
+      const remoteHash = await this.getGitRevParse(`origin/${remoteBranch}`, repoPath)
+      if (!remoteHash) {
         // Remote branch doesn't exist, no update available
         return {
           hasUpdate: false,
         }
       }
-      // Check if remote is ahead
-      const revListCmd = new Deno.Command('git', {
-        args: ['rev-list', '--count', `HEAD..origin/${remoteBranch}`],
-        cwd: repoPath,
-        stdout: 'piped',
-        stderr: 'null',
-      })
-      const revListResult = await revListCmd.output()
 
-      if (revListResult.success) {
-        const commitsAhead = parseInt(new TextDecoder().decode(revListResult.stdout).trim())
-        const hasUpdate = commitsAhead > 0
-        const changelogUrl = hasUpdate ? await this.buildChangelogUrl(repoPath, remoteBranch) : undefined
-
-        return {
-          hasUpdate,
-          changelogUrl,
-        }
+      // Get current commit hash
+      const currentHash = await this.getGitRevParse('HEAD', repoPath)
+      if (!currentHash) {
+        return null
       }
 
-      return null
+      // Compare hashes to determine if there's an update
+      const hasUpdate = remoteHash !== currentHash
+      const currentCommit = currentHash.slice(0, 7)
+      const changelogUrl = hasUpdate ? await this.buildChangelogUrl(repoPath, remoteBranch) : undefined
+
+      return {
+        hasUpdate,
+        changelogUrl,
+        currentCommit,
+      }
     } catch (error) {
       // deno-lint-ignore no-explicit-any
       console.log('  ⚠ Update check failed:', (error as any)?.message)
@@ -975,6 +1104,15 @@ export class Installer {
     return `${changes.length} change(s): ${summary.join(', ')}`
   }
 
+  /**
+   * Checks if a given path is the agent-recipes repository
+   * by verifying the git remote URL
+   */
+  private async isAgentRecipesRepository(repoPath: string): Promise<boolean> {
+    const remoteUrl = await this.getRemoteUrl(repoPath)
+    return remoteUrl ? remoteUrl.includes('stashaway-agent-recipes') : false
+  }
+
   private async getDefaultRemoteBranch(repoPath: string): Promise<string> {
     // Check if a source branch was detected during installation
     const sourceBranch = Deno.env.get('AGENT_RECIPES_SOURCE_BRANCH')
@@ -983,26 +1121,32 @@ export class Installer {
       return sourceBranch
     }
 
-    try {
-      // Check current branch of the repo
-      const currentBranchCmd = new Deno.Command('git', {
-        args: ['branch', '--show-current'],
-        cwd: repoPath,
-        stdout: 'piped',
-        stderr: 'null',
-      })
-      const currentBranchResult = await currentBranchCmd.output()
+    // Only check current branch if repoPath is actually the agent-recipes repository
+    // This prevents picking up branches from unrelated repositories
+    const isAgentRecipesRepo = await this.isAgentRecipesRepository(repoPath)
 
-      if (currentBranchResult.success) {
-        const currentBranch = new TextDecoder().decode(currentBranchResult.stdout).trim()
-        // If on a non-default branch, use it for updates
-        if (currentBranch && currentBranch !== 'main' && currentBranch !== 'master') {
-          console.log(`  ℹ Using current branch: ${currentBranch}`)
-          return currentBranch
+    if (isAgentRecipesRepo) {
+      try {
+        // Check current branch of the repo
+        const currentBranchCmd = new Deno.Command('git', {
+          args: ['branch', '--show-current'],
+          cwd: repoPath,
+          stdout: 'piped',
+          stderr: 'null',
+        })
+        const currentBranchResult = await currentBranchCmd.output()
+
+        if (currentBranchResult.success) {
+          const currentBranch = new TextDecoder().decode(currentBranchResult.stdout).trim()
+          // If on a non-default branch, use it for updates
+          if (currentBranch && currentBranch !== 'main' && currentBranch !== 'master') {
+            console.log(`  ℹ Using current branch: ${currentBranch}`)
+            return currentBranch
+          }
         }
+      } catch {
+        // Ignore errors
       }
-    } catch {
-      // Ignore errors
     }
 
     try {
@@ -1027,14 +1171,8 @@ export class Installer {
     // Try main first, then master
     const branches = ['main', 'master']
     for (const branch of branches) {
-      const cmd = new Deno.Command('git', {
-        args: ['rev-parse', '--verify', `origin/${branch}`],
-        cwd: repoPath,
-        stdout: 'null',
-        stderr: 'null',
-      })
-      const result = await cmd.output()
-      if (result.success) {
+      const hash = await this.getGitRevParse(`origin/${branch}`, repoPath)
+      if (hash) {
         return branch
       }
     }

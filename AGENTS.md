@@ -8,6 +8,20 @@ This file contains instructions for working on the StashAway Agent Recipes repos
 
 **Purpose**: Centralized repository for reusable AI agent configurations, instructions, skills, and tools for StashAway engineering teams.
 
+## Important Context
+
+**When working in this repository, assume all discussions about creating agents, skills, or updating configs refer to modifying THIS repository**
+(stashaway-agent-recipes), not user projects.
+
+For example:
+
+- "Create a new skill" → Add a skill to `skills/sa-*/` in this repo
+- "Update the config" → Modify files in `instructions/{platform}/{config_file}`
+- "Add agent instructions" → Update templates in `instructions/` or `instructions/GLOBAL_INSTRUCTIONS.md`
+- "Modify templates" → Edit `.eta` files in `instructions/{platform}/`
+
+These changes will be distributed to all users when they run `agent-recipes sync`.
+
 ## Technology Stack
 
 - **Runtime**: Deno 2.x
@@ -85,19 +99,124 @@ interface PlatformConfig {
 - Example: Reference "rightsize" not "sa-rightsize", "branch-name" not "sa-branch-name"
 - This applies to all skill references in SKILL.md files, descriptions, and documentation
 
+### Agents & Commands Management
+
+**Overview**: Agents and commands provide a unified, provider-agnostic way to define sub-agents and slash commands that work across Claude Code,
+OpenCode, and Codex.
+
+**Directory Structure**:
+
+```
+agents/               # Agent definitions
+  └── *.md           # Each file defines one agent
+commands/            # Command definitions
+  └── *.md           # Each file defines one command
+```
+
+**File Format**: All agents and commands use markdown files with YAML frontmatter:
+
+```markdown
+---
+name: agent-name
+description: Brief description
+model: claude-sonnet-4
+tools: Read, Grep, Glob
+---
+
+# Agent Instructions
+
+Your detailed agent instructions here...
+```
+
+**Core Frontmatter Fields**:
+
+- `name` (required): Unique identifier (kebab-case)
+- `description` (required): Brief description of purpose
+- `model` (optional): Model override
+- `tools` (optional): Comma-separated list of allowed tools
+- `allowed-tools` (optional, commands only): Specific tool restrictions
+- `argument-hint` (optional, commands only): Expected arguments format
+- `agent` (optional, commands only): Link to specific agent
+
+**Provider-Specific Overrides**:
+
+Use `provider-overrides` to specify provider-specific values:
+
+```yaml
+---
+name: my-agent
+description: Example agent
+model: sonnet
+tools: Read, Grep, Glob
+provider-overrides:
+  claude:
+    model: claude-sonnet-4
+  opencode:
+    model: anthropic/claude-3-5-sonnet-20241022
+    temperature: 0.7
+    tools:
+      read: true
+      grep: true
+  codex:
+    model: gpt-4.1
+---
+```
+
+**Command Arguments**:
+
+Commands support universal argument placeholders:
+
+- `$ARGUMENTS` - All arguments as a single string
+- `$1`, `$2`, `$3`, etc. - Individual positional arguments
+
+Example:
+
+```markdown
+---
+name: review-pr
+argument-hint: '[pr-number] [priority] [assignee]'
+---
+
+Review PR #$1 with priority $2 and assign to $3
+```
+
+**Tools Format Conversion**:
+
+The system automatically converts tools to platform-specific formats:
+
+- **Claude/Codex**: String format (`"Read, Grep, Glob"`)
+- **OpenCode**: Object format (`{ read: true, grep: true }`)
+
+**Sync Process**:
+
+During `agent-recipes sync`, the system:
+
+1. Reads all `agents/*.md` and `commands/*.md` files
+2. Parses YAML frontmatter and markdown body
+3. Applies provider-specific overrides for each platform
+4. Converts tools format based on platform requirements
+5. Writes to platform-specific directories:
+   - Claude: `~/.claude/agents/`, `~/.claude/commands/`
+   - OpenCode: `~/.config/opencode/agent/`, `~/.config/opencode/command/`
+   - Codex: Commands only to `~/.codex/prompts/`
+
+**Native Discovery**: All providers automatically discover agents and commands from their respective directories. No explicit listing required.
+
 ## System Architecture
 
 ### Module Organization
 
 The CLI is organized into specialized modules in `cli/lib/`:
 
-| Module             | Lines | Responsibility                                                              |
-| ------------------ | ----- | --------------------------------------------------------------------------- |
-| `installer.ts`     | 1361  | Orchestrates sync, repository discovery, template rendering, config merging |
-| `config-merger.ts` | 631+  | Three-way merge algorithm for configuration files                           |
-| `state-manager.ts` | 202   | Persists installation state and merge tracking                              |
-| `config-format.ts` | 183   | Auto-detects and parses JSON/JSONC/YAML/TOML formats                        |
-| `converter.ts`     | 121   | Transforms skills between platform-specific formats                         |
+| Module                         | Lines | Responsibility                                                              |
+| ------------------------------ | ----- | --------------------------------------------------------------------------- |
+| `installer.ts`                 | 1400+ | Orchestrates sync, repository discovery, template rendering, config merging |
+| `config-merger.ts`             | 631+  | Three-way merge algorithm for configuration files                           |
+| `state-manager.ts`             | 202   | Persists installation state and merge tracking                              |
+| `config-format.ts`             | 183   | Auto-detects and parses JSON/JSONC/YAML/TOML formats                        |
+| `converter.ts`                 | 121   | Transforms skills between platform-specific formats                         |
+| `agents-commands-converter.ts` | 150+  | Parses and transforms agents/commands for platform-specific formats         |
+| `platform-config.ts`           | 100+  | Defines platform configurations and tool format mappings                    |
 
 **Dependency Flow**:
 
@@ -108,7 +227,8 @@ Installer (core orchestrator)
     ├→ StateManager (persist state.json)
     ├→ ConfigMerger (three-way merge)
     ├→ ConfigParserFactory (detect format)
-    └→ Converter (transform skills)
+    ├→ Converter (transform skills)
+    └→ AgentsCommandsConverter (transform agents & commands)
 ```
 
 ### Installation & Sync Process
@@ -131,7 +251,7 @@ Installer (core orchestrator)
 └── repo/               # Git repository (if installed from git)
 ```
 
-**Sync Flow** (cli/lib/installer.ts:315-393):
+**Sync Flow** (cli/lib/installer.ts):
 
 1. Load `GLOBAL_INSTRUCTIONS.md` content
 2. For each platform:
@@ -142,7 +262,9 @@ Installer (core orchestrator)
    - Apply managed section markers (`<stashaway-recipes-managed-section>`)
    - Write to `~/.{platform-dir}/` (e.g., `~/.claude/CLAUDE.md`)
 3. Sync skills with `sa-` prefix to `~/.{platform-dir}/skills/`
-4. Merge platform config files (if specified)
+4. Sync agents from `agents/*.md` to platform-specific agent directories
+5. Sync commands from `commands/*.md` to platform-specific command directories
+6. Merge platform config files (if specified)
 
 **Managed Section System** (cli/lib/installer.ts:399-462):
 
@@ -302,6 +424,14 @@ agent-recipes list             # Verify skills detected
 - Ensure skill directories have `sa-` prefix for managed skills
 - Verify frontmatter has required `name` and `description` fields
 - Check `agent-recipes list` to see what's detected
+
+**Agents/Commands not syncing**:
+
+- Verify files are in `agents/` or `commands/` directories
+- Check frontmatter has required `name` and `description` fields
+- Ensure YAML frontmatter is valid (quote values with special characters)
+- Run `agent-recipes sync --verbose` to see detailed sync output
+- Verify platform supports agents/commands (Codex: commands only)
 
 **Template rendering errors**:
 

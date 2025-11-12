@@ -1,2 +1,39 @@
 {
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": true,
+  "permission": {
+    "webfetch": "ask",
+    "external_directory": "ask",
+    "bash": {
+      "*": "ask",
+      "git status": "allow",
+      "git diff": "allow",
+      "npm run build": "allow",
+      "ls": "allow",
+      "pwd": "allow",
+      "grep": "allow",
+      "rg": "allow",
+      "fd": "allow",
+      "find": "allow",
+      "tree": "allow",
+      "cat": "allow",
+      "head": "allow",
+      "tail": "allow",
+      "wc": "allow",
+      "asdf install": "allow",
+      "npm install": "allow",
+      "pnpm install": "allow",
+      "yarn install": "allow",
+      "pip install": "allow",
+      "pip3 install": "allow",
+      "python -m pip install": "allow",
+      "pipenv install": "allow",
+      "poetry install": "allow",
+      "uv pip install": "allow",
+      "go install": "allow",
+      "go get": "allow",
+      "go mod tidy": "allow",
+      "go mod download": "allow"
+    }
+  }
 }

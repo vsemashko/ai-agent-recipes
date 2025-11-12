@@ -1,4 +1,14 @@
 # Codex Configuration (TOML format)
+project_doc_fallback_filenames = ["CLAUDE.md", ".junie/guidelines.md"]
 
 [features]
 web_search_request = true        # allow the model to request web searches
+
+[model_providers.litellm]
+name = "litellm"
+base_url = "https://litellm.stashaway.cloud"
+env_key = "LITELLM_API_KEY"
+wire_api = "responses"
+
+[profiles.litellm]
+model_provider = "litellm"

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.3
+
+- feat: SA-665 integrate agents and commands sync
+   - add subagents and slash commands sync 
+   - use standardized Markdown with YAML frontmatter format, that is converted to tool specific ones
+   - add configs for opencode
+
 ## 0.1.2
 
 - feat: SA-665 Exclude skills scripts from deno linting

@@ -78,7 +78,9 @@ export const syncCommand = new Command()
       if (updateInfo?.hasUpdate) {
         console.log(`📦 Update available (${previousVersion ?? 'unknown'} → latest)\n`)
       } else if (updateInfo) {
-        console.log(`✓ Already on latest version (${previousVersion ?? 'unknown'})\n`)
+        const versionInfo = previousVersion ?? 'unknown'
+        const commitInfo = updateInfo.currentCommit ? ` (${updateInfo.currentCommit})` : ''
+        console.log(`✓ Already on latest version ${versionInfo}${commitInfo}\n`)
       } else {
         console.log('✓ Version check skipped\n')
       }
