@@ -1,0 +1,7 @@
+# Project-Level Instructions (Claude Code)
+
+This file contains project-level instructions for Claude Code.
+
+<%= it.agents %>
+
+<%= it.skillsSection %>

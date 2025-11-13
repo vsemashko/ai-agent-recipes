@@ -1,0 +1,30 @@
+{
+  "$schema": "./project-sync-config.schema.json",
+  "version": "1.0",
+  "description": "Central configuration for project-level syncing",
+
+  "skills": {
+    "include": [
+      "commit-message",
+      "branch-name",
+      "rightsize"
+    ],
+    "exclude": [
+      "document-skills-docx",
+      "document-skills-pptx",
+      "document-skills-pdf",
+      "document-skills-xlsx",
+      "skill-sandbox",
+      "skill-creator",
+      "slack-gif-creator"
+    ]
+  },
+
+  "agents": {
+    "include": []
+  },
+
+  "commands": {
+    "include": []
+  }
+}

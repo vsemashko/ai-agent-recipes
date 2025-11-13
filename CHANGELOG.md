@@ -4,55 +4,40 @@
 
 ### Added
 
-- **Project-Level Provider Support** - Major new feature enabling project-level agent recipes
-  - New `agent-recipes project` command suite for managing project configurations
-  - Initialize project recipes: `agent-recipes project init`
-  - Sync project configurations: `agent-recipes project sync`
-  - Manage skills: `agent-recipes project add-skill`, `agent-recipes project remove-skill`
-  - List and validate: `agent-recipes project list`, `agent-recipes project validate`
+- **Project-Level Provider Support** - Simplified centrally-managed project sync
+  - New `agent-recipes project sync` command for syncing to project repositories
+  - Central configuration in `project-sync-config.json` (no per-project config needed)
+  - Support for Claude Code, OpenCode, Codex, Cursor
+  - Syncs to `.agent-recipes/.claude/`, `.agent-recipes/.config/opencode/`, etc.
 
-- **Provider-Agnostic Configuration**
-  - Commit AI agent configurations directly to repositories
-  - Support for multiple providers: Claude Code, OpenCode, Codex, Cursor
-  - Provider-specific overrides in configuration
-  - Team-wide consistency with `.agent-recipes/` directory
-
-- **Selective Skill Sync**
-  - Curated skill lists per project
+- **Central Skill Curation**
+  - Centrally-defined skill lists in `project-sync-config.json`
   - Include/exclude patterns (e.g., `"document-skills-*"`)
-  - Default exclusions for large documentation skills
-  - Reduced repository footprint
+  - Default exclusions for large documentation skills (~2.6MB total)
+  - All projects get same curated set of skills
 
-- **Project-Specific Agents & Commands**
-  - Define project-local agents in `.agent-recipes/agents/`
-  - Define project-local commands in `.agent-recipes/commands/`
-  - Inherit from user-level or use local configurations
+- **Project Templates**
+  - `instructions/project/AGENTS.md.eta` - Global instructions + skills section
+  - `instructions/project/CLAUDE.md.eta` - Claude-specific with global instructions
+  - Uses same GLOBAL_INSTRUCTIONS approach as user-level
+
+- **Cursor Support**
+  - Added Cursor platform configuration
+  - Support for `.cursor/rules/` directory
+  - Cursor MDC format with globs and alwaysApply
 
 - **New Modules**
-  - `cli/lib/project-installer.ts` - Project-level sync logic (600+ lines)
-  - `cli/lib/project-config.ts` - Configuration schema and validation (300+ lines)
-  - `cli/commands/project.ts` - CLI commands for project operations
-
-- **Provider Templates**
-  - `instructions/project/claude.eta` - Claude Code project template
-  - `instructions/project/opencode.eta` - OpenCode project template
-  - `instructions/project/codex.eta` - Codex project template
-  - `instructions/project/cursor.eta` - Cursor project template
-
-### Documentation
-
-- Added comprehensive migration guide: `docs/PROJECT_LEVEL_MIGRATION.md`
-- Updated `AGENTS.md` with project-level support section
-- Added examples for configuration, agents, and commands
-- Documented best practices and troubleshooting
+  - `cli/lib/project-installer.ts` - Simplified project sync logic (450+ lines)
+  - `cli/commands/project.ts` - Single sync command
+  - `project-sync-config.json` - Central configuration file
 
 ### Benefits
 
-- **Team Consistency**: Everyone uses same AI agent configurations
-- **Multi-Tool Support**: Works across Claude Code, OpenCode, Codex, Cursor, and more
-- **Easy Onboarding**: New team members get correct setup on clone
-- **Version Control**: All configurations committed to repository
-- **Flexible**: Both user-level (personal) and project-level (team) configs coexist
+- **Zero Configuration**: No per-project setup, just run `agent-recipes project sync`
+- **Team Consistency**: Central config ensures all projects use same setup
+- **Multi-Tool Support**: Works across Claude Code, OpenCode, Codex, Cursor
+- **Easy Onboarding**: Single command to get correct setup
+- **Reduced Footprint**: Only essential skills synced to projects
 
 ## 0.1.3
 

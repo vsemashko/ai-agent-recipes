@@ -8,7 +8,7 @@ export type ToolsFormat = 'string' | 'object' | 'array'
 export interface PlatformConfig {
   name: string
   dir: string
-  skillsFormat?: 'agent-md' // If set, convert & embed skills in templates with this format
+  skillsFormat?: 'agent-md' | 'cursor-mdc' // If set, convert & embed skills in templates with this format
   pathReplacements?: Record<string, string>
   configFile?: string // Config filename (same in both user dir and repo)
   configMergeStrategy?: MergeStrategy[] // Custom merge strategy for this platform's config
@@ -16,6 +16,7 @@ export interface PlatformConfig {
   // Agents & Commands support (file-based)
   agentsDir?: string // Subdirectory for agent files (e.g., 'agents', 'agent')
   commandsDir?: string // Subdirectory for command files (e.g., 'commands', 'command', 'prompts')
+  rulesDir?: string // Subdirectory for Cursor rules (e.g., '.cursorrules', 'rules')
   toolsFormat?: ToolsFormat // Format for tools field in agents/commands
 }
 
@@ -56,5 +57,17 @@ export const PLATFORM_CONFIGS: Record<string, PlatformConfig> = {
     agentsDir: 'agent',
     commandsDir: 'command',
     toolsFormat: 'object', // { read: true, grep: true }
+  },
+
+  'cursor': {
+    name: 'Cursor',
+    dir: '.cursor',
+    skillsFormat: 'cursor-mdc', // Cursor uses MDC format with globs
+    pathReplacements: {
+      '~/.claude': '~/.cursor',
+    },
+    // Cursor uses .cursorrules directory
+    rulesDir: 'rules',
+    toolsFormat: 'string',
   },
 }

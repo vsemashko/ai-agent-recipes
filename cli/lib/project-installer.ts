@@ -1,22 +1,33 @@
 /**
- * Project Installer
+ * Project Installer - Simplified
  *
- * Handles installation and syncing of agent recipes at the project level.
- * Syncs configurations to .agent-recipes/ directory in project root.
+ * Syncs agent recipes to project level using central configuration.
+ * All projects get the same curated set of skills/agents/commands.
  */
 
 import { exists } from '@std/fs'
-import { basename, dirname, join } from '@std/path'
+import { join } from '@std/path'
 import { Eta } from 'eta'
-import { batchConvertSkills } from './converter.ts'
 import { parseFrontmatter, processContentForPlatform, reconstructMarkdown } from './agents-commands-converter.ts'
 import { PLATFORM_CONFIGS } from './platform-config.ts'
-import { DEFAULT_EXCLUDED_SKILLS, ProjectConfig, ProjectConfigManager } from './project-config.ts'
 import { StateManager } from './state-manager.ts'
 
 interface ProjectInstallerOptions {
   verbose?: boolean
   repoPath?: string // Path to agent-recipes repository
+}
+
+interface ProjectSyncConfig {
+  skills: {
+    include: string[]
+    exclude: string[]
+  }
+  agents: {
+    include: string[]
+  }
+  commands: {
+    include: string[]
+  }
 }
 
 interface SkillInfo {
@@ -30,13 +41,10 @@ interface ProjectSyncSummary {
   skillsCount: number
   agentsCount: number
   commandsCount: number
-  filesCreated: number
-  filesUpdated: number
 }
 
 export class ProjectInstaller {
   private projectRoot: string
-  private configManager: ProjectConfigManager
   private repoPath: string
   private eta: Eta
   private verbose: boolean
@@ -44,14 +52,12 @@ export class ProjectInstaller {
 
   constructor(projectRoot: string, options: ProjectInstallerOptions = {}) {
     this.projectRoot = projectRoot
-    this.configManager = new ProjectConfigManager(projectRoot)
     this.verbose = Boolean(options.verbose)
 
     // Determine repository path
     if (options.repoPath) {
       this.repoPath = options.repoPath
     } else {
-      // Try to find repository
       const homeDir = Deno.env.get('HOME') || Deno.env.get('USERPROFILE') || ''
       const defaultInstallDir = join(homeDir, '.stashaway-agent-recipes')
       this.repoPath = Deno.env.get('AGENT_RECIPES_HOME') || defaultInstallDir
@@ -64,103 +70,55 @@ export class ProjectInstaller {
     })
 
     // Initialize state manager for project
-    const agentRecipesDir = this.configManager.getAgentRecipesDir()
+    const agentRecipesDir = join(this.projectRoot, '.agent-recipes')
     this.stateManager = new StateManager(agentRecipesDir)
   }
 
   /**
-   * Initialize a new project configuration
+   * Sync project configurations using central config
    */
-  async init(providers: string[], skillsInclude?: string[]): Promise<void> {
-    this.logVerbose('🔧 Initializing project-level agent recipes...')
-
-    // Check if already initialized
-    if (await this.configManager.exists()) {
-      throw new Error('Project already initialized. Use "agent-recipes project sync" to update.')
-    }
-
-    // Create default configuration
-    const config: ProjectConfig = {
-      version: '1.0',
-      providers,
-      skills: {
-        include: skillsInclude || ['commit-message', 'branch-name'],
-        exclude: DEFAULT_EXCLUDED_SKILLS,
-      },
-      agents: {
-        source: 'local',
-        include: [],
-      },
-      commands: {
-        source: 'local',
-        include: [],
-      },
-      sync: {
-        autoSync: true,
-        commitToRepo: true,
-      },
-    }
-
-    // Save configuration
-    await this.configManager.save(config)
-
-    // Create directory structure
-    await this.createDirectoryStructure()
-
-    // Create empty directories for agents and commands
-    await Deno.mkdir(this.configManager.getAgentsDir(), { recursive: true })
-    await Deno.mkdir(this.configManager.getCommandsDir(), { recursive: true })
-
-    this.logVerbose(`✅ Project initialized at ${this.configManager.getAgentRecipesDir()}`)
-    this.logVerbose('📝 Configuration saved to .agent-recipes/config.json')
-    this.logVerbose('\n💡 Next steps:')
-    this.logVerbose('  1. Customize .agent-recipes/config.json')
-    this.logVerbose('  2. Run "agent-recipes project sync" to sync configurations')
-    this.logVerbose('  3. Commit .agent-recipes/ to your repository')
-  }
-
-  /**
-   * Sync project configurations
-   */
-  async sync(): Promise<ProjectSyncSummary> {
+  async sync(providers?: string[]): Promise<ProjectSyncSummary> {
     this.logVerbose('🔄 Syncing project-level agent recipes...\n')
 
-    // Load project configuration
-    const config = await this.configManager.load()
+    // Load central project sync configuration
+    const syncConfig = await this.loadCentralConfig()
 
     // Load state
     await this.stateManager.load()
 
+    // Determine providers to sync
+    const targetProviders = providers || Object.keys(PLATFORM_CONFIGS)
+
     const summary: ProjectSyncSummary = {
-      providers: config.providers,
+      providers: targetProviders,
       skillsCount: 0,
       agentsCount: 0,
       commandsCount: 0,
-      filesCreated: 0,
-      filesUpdated: 0,
     }
 
     // Get available skills from repository
     const availableSkills = await this.getAvailableSkills()
 
-    // Filter skills based on configuration
-    const skillsToSync = this.configManager.filterSkills(
+    // Filter skills based on central configuration
+    const skillsToSync = this.filterSkills(
       availableSkills.map((s) => s.name),
-      config.skills || { exclude: DEFAULT_EXCLUDED_SKILLS },
+      syncConfig.skills,
     )
 
-    // Sync for each provider
-    for (const provider of config.providers) {
-      this.logVerbose(`📦 Syncing for ${provider}...`)
+    // Create .agent-recipes directory structure
+    await this.ensureDirectoryStructure()
 
+    // Sync for each provider
+    for (const provider of targetProviders) {
       const platformConfig = PLATFORM_CONFIGS[provider]
       if (!platformConfig) {
         console.warn(`⚠  Unknown provider: ${provider}, skipping`)
         continue
       }
 
-      // Create provider directory
-      const providerDir = this.configManager.getProviderDir(provider)
+      this.logVerbose(`📦 Syncing for ${platformConfig.name}...`)
+
+      const providerDir = join(this.projectRoot, `.agent-recipes`, platformConfig.dir)
       await Deno.mkdir(providerDir, { recursive: true })
 
       // Sync skills
@@ -168,24 +126,34 @@ export class ProjectInstaller {
         skillsToSync,
         availableSkills,
         provider,
+        providerDir,
       )
       summary.skillsCount += skillsUpdated
 
       // Sync agents
-      const agentsUpdated = await this.syncAgents(config, provider)
+      const agentsUpdated = await this.syncAgents(
+        syncConfig.agents.include,
+        provider,
+        providerDir,
+      )
       summary.agentsCount += agentsUpdated
 
       // Sync commands
-      const commandsUpdated = await this.syncCommands(config, provider)
+      const commandsUpdated = await this.syncCommands(
+        syncConfig.commands.include,
+        provider,
+        providerDir,
+      )
       summary.commandsCount += commandsUpdated
 
-      // Render provider-specific instructions
-      const instructionsUpdated = await this.renderInstructions(config, provider, skillsToSync)
-      if (instructionsUpdated) {
-        summary.filesUpdated++
-      }
+      // Render instructions (AGENTS.md and CLAUDE.md for Claude, AGENTS.md for others)
+      await this.renderInstructions(
+        provider,
+        providerDir,
+        skillsToSync,
+      )
 
-      this.logVerbose(`  ✓ ${provider} synced\n`)
+      this.logVerbose(`  ✓ ${platformConfig.name} synced\n`)
     }
 
     // Save state
@@ -194,89 +162,24 @@ export class ProjectInstaller {
     return summary
   }
 
-  /**
-   * List available skills in repository
-   */
-  async listAvailableSkills(): Promise<SkillInfo[]> {
-    return await this.getAvailableSkills()
-  }
-
-  /**
-   * Add a skill to project configuration
-   */
-  async addSkill(skillName: string): Promise<void> {
-    const config = await this.configManager.load()
-
-    // Ensure skills.include exists
-    if (!config.skills) {
-      config.skills = { include: [], exclude: DEFAULT_EXCLUDED_SKILLS }
-    }
-    if (!config.skills.include) {
-      config.skills.include = []
-    }
-
-    // Check if already included
-    if (config.skills.include.includes(skillName)) {
-      throw new Error(`Skill "${skillName}" is already included in project`)
-    }
-
-    // Add skill
-    config.skills.include.push(skillName)
-
-    // Save configuration
-    await this.configManager.save(config)
-
-    this.logVerbose(`✅ Added skill "${skillName}" to project configuration`)
-    this.logVerbose('💡 Run "agent-recipes project sync" to apply changes')
-  }
-
-  /**
-   * Remove a skill from project configuration
-   */
-  async removeSkill(skillName: string): Promise<void> {
-    const config = await this.configManager.load()
-
-    if (!config.skills?.include) {
-      throw new Error('No skills configured in project')
-    }
-
-    // Check if skill is included
-    const index = config.skills.include.indexOf(skillName)
-    if (index === -1) {
-      throw new Error(`Skill "${skillName}" is not included in project`)
-    }
-
-    // Remove skill
-    config.skills.include.splice(index, 1)
-
-    // Save configuration
-    await this.configManager.save(config)
-
-    this.logVerbose(`✅ Removed skill "${skillName}" from project configuration`)
-    this.logVerbose('💡 Run "agent-recipes project sync" to apply changes')
-  }
-
-  /**
-   * Validate project configuration
-   */
-  async validate(): Promise<void> {
-    const config = await this.configManager.load()
-    this.configManager.validate(config)
-    this.logVerbose('✅ Project configuration is valid')
-  }
-
   // ============================================================================
   // Private methods
   // ============================================================================
 
-  private async createDirectoryStructure(): Promise<void> {
-    const agentRecipesDir = this.configManager.getAgentRecipesDir()
+  private async loadCentralConfig(): Promise<ProjectSyncConfig> {
+    const configPath = join(this.repoPath, 'repo', 'project-sync-config.json')
 
-    // Create main directories
-    await Deno.mkdir(join(agentRecipesDir, 'skills'), { recursive: true })
-    await Deno.mkdir(join(agentRecipesDir, 'agents'), { recursive: true })
-    await Deno.mkdir(join(agentRecipesDir, 'commands'), { recursive: true })
-    await Deno.mkdir(join(agentRecipesDir, 'providers'), { recursive: true })
+    try {
+      const content = await Deno.readTextFile(configPath)
+      return JSON.parse(content) as ProjectSyncConfig
+    } catch (error) {
+      throw new Error(`Failed to load central project sync config: ${(error as Error).message}`)
+    }
+  }
+
+  private async ensureDirectoryStructure(): Promise<void> {
+    const agentRecipesDir = join(this.projectRoot, '.agent-recipes')
+    await Deno.mkdir(agentRecipesDir, { recursive: true })
   }
 
   private async getAvailableSkills(): Promise<SkillInfo[]> {
@@ -301,12 +204,45 @@ export class ProjectInstaller {
     return skills.sort((a, b) => a.name.localeCompare(b.name))
   }
 
+  private filterSkills(
+    availableSkills: string[],
+    config: { include: string[]; exclude: string[] },
+  ): string[] {
+    const { include, exclude } = config
+
+    // Start with include list (or all skills if empty)
+    let filtered = include.length > 0
+      ? include.filter((s) => availableSkills.includes(s))
+      : [...availableSkills]
+
+    // Apply exclude patterns
+    filtered = filtered.filter((skill) => !this.isSkillExcluded(skill, exclude))
+
+    return filtered
+  }
+
+  private isSkillExcluded(skillName: string, excludePatterns: string[]): boolean {
+    for (const pattern of excludePatterns) {
+      if (pattern.includes('*')) {
+        // Wildcard pattern matching
+        const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$')
+        if (regex.test(skillName)) {
+          return true
+        }
+      } else if (skillName === pattern) {
+        // Exact match
+        return true
+      }
+    }
+    return false
+  }
+
   private async syncSkills(
     skillNames: string[],
     availableSkills: SkillInfo[],
     provider: string,
+    providerDir: string,
   ): Promise<number> {
-    const providerDir = this.configManager.getProviderDir(provider)
     const skillsTargetDir = join(providerDir, 'skills')
     await Deno.mkdir(skillsTargetDir, { recursive: true })
 
@@ -337,18 +273,18 @@ export class ProjectInstaller {
     return syncedCount
   }
 
-  private async syncAgents(config: ProjectConfig, provider: string): Promise<number> {
+  private async syncAgents(
+    agentNames: string[],
+    provider: string,
+    providerDir: string,
+  ): Promise<number> {
     const platformConfig = PLATFORM_CONFIGS[provider]
     if (!platformConfig.agentsDir) {
       return 0 // Provider doesn't support agents
     }
 
-    const agentsSource = config.agents?.source || 'local'
-    const sourceDir = agentsSource === 'local'
-      ? this.configManager.getAgentsDir()
-      : join(this.repoPath, 'repo', 'agents')
-
-    const targetDir = join(this.configManager.getProviderDir(provider), 'agents')
+    const sourceDir = join(this.repoPath, 'repo', 'agents')
+    const targetDir = join(providerDir, platformConfig.agentsDir)
     await Deno.mkdir(targetDir, { recursive: true })
 
     // Get agent files to sync
@@ -356,7 +292,10 @@ export class ProjectInstaller {
     try {
       for await (const entry of Deno.readDir(sourceDir)) {
         if (entry.isFile && entry.name.endsWith('.md')) {
-          agentFiles.push(entry.name)
+          const agentName = entry.name.replace('.md', '')
+          if (agentNames.length === 0 || agentNames.includes(agentName)) {
+            agentFiles.push(entry.name)
+          }
         }
       }
     } catch {
@@ -364,14 +303,8 @@ export class ProjectInstaller {
       return 0
     }
 
-    // Filter by include list if specified
-    const includeList = config.agents?.include || []
-    const filesToSync = includeList.length > 0
-      ? agentFiles.filter((f) => includeList.includes(f.replace('.md', '')))
-      : agentFiles
-
     // Sync each agent file
-    for (const filename of filesToSync) {
+    for (const filename of agentFiles) {
       const sourcePath = join(sourceDir, filename)
       const targetPath = join(targetDir, filename)
 
@@ -380,22 +313,22 @@ export class ProjectInstaller {
       await Deno.writeTextFile(targetPath, processed)
     }
 
-    this.logVerbose(`  ✓ Synced ${filesToSync.length} agents`)
-    return filesToSync.length
+    this.logVerbose(`  ✓ Synced ${agentFiles.length} agents`)
+    return agentFiles.length
   }
 
-  private async syncCommands(config: ProjectConfig, provider: string): Promise<number> {
+  private async syncCommands(
+    commandNames: string[],
+    provider: string,
+    providerDir: string,
+  ): Promise<number> {
     const platformConfig = PLATFORM_CONFIGS[provider]
     if (!platformConfig.commandsDir) {
       return 0 // Provider doesn't support commands
     }
 
-    const commandsSource = config.commands?.source || 'local'
-    const sourceDir = commandsSource === 'local'
-      ? this.configManager.getCommandsDir()
-      : join(this.repoPath, 'repo', 'commands')
-
-    const targetDir = join(this.configManager.getProviderDir(provider), platformConfig.commandsDir)
+    const sourceDir = join(this.repoPath, 'repo', 'commands')
+    const targetDir = join(providerDir, platformConfig.commandsDir)
     await Deno.mkdir(targetDir, { recursive: true })
 
     // Get command files to sync
@@ -403,7 +336,10 @@ export class ProjectInstaller {
     try {
       for await (const entry of Deno.readDir(sourceDir)) {
         if (entry.isFile && entry.name.endsWith('.md')) {
-          commandFiles.push(entry.name)
+          const commandName = entry.name.replace('.md', '')
+          if (commandNames.length === 0 || commandNames.includes(commandName)) {
+            commandFiles.push(entry.name)
+          }
         }
       }
     } catch {
@@ -411,14 +347,8 @@ export class ProjectInstaller {
       return 0
     }
 
-    // Filter by include list if specified
-    const includeList = config.commands?.include || []
-    const filesToSync = includeList.length > 0
-      ? commandFiles.filter((f) => includeList.includes(f.replace('.md', '')))
-      : commandFiles
-
     // Sync each command file
-    for (const filename of filesToSync) {
+    for (const filename of commandFiles) {
       const sourcePath = join(sourceDir, filename)
       const targetPath = join(targetDir, filename)
 
@@ -427,8 +357,8 @@ export class ProjectInstaller {
       await Deno.writeTextFile(targetPath, processed)
     }
 
-    this.logVerbose(`  ✓ Synced ${filesToSync.length} commands`)
-    return filesToSync.length
+    this.logVerbose(`  ✓ Synced ${commandFiles.length} commands`)
+    return commandFiles.length
   }
 
   private async processAgentFile(filePath: string, provider: string): Promise<string> {
@@ -460,44 +390,86 @@ export class ProjectInstaller {
   }
 
   private async renderInstructions(
-    config: ProjectConfig,
     provider: string,
+    providerDir: string,
     skills: string[],
-  ): Promise<boolean> {
-    const templatePath = join(this.repoPath, 'repo', 'instructions', 'project', `${provider}.eta`)
-
-    // Check if template exists
-    if (!await exists(templatePath)) {
-      this.logVerbose(`  ℹ No template for ${provider}, skipping instructions`)
-      return false
-    }
-
-    // Load template
-    const template = await Deno.readTextFile(templatePath)
-
+  ): Promise<void> {
     // Load global instructions
     const globalInstructionsPath = join(this.repoPath, 'repo', 'instructions', 'GLOBAL_INSTRUCTIONS.md')
     const globalInstructions = await exists(globalInstructionsPath)
       ? await Deno.readTextFile(globalInstructionsPath)
       : ''
 
-    // Render skills list
-    const skillsList = skills.join(', ')
+    // Render skills section
+    const skillsSection = await this.renderSkillsSection(provider, skills)
 
-    // Render template
-    const rendered = this.eta.renderString(template, {
+    const context = {
       agents: globalInstructions,
-      skills: skillsList,
+      skillsSection,
+      skills: skills.join(', '),
       skillsCount: skills.length,
-      provider,
-    })
+      platform: provider,
+    }
 
-    // Write to provider directory
-    const targetPath = join(this.configManager.getProviderDir(provider), 'AGENTS.md')
-    await Deno.writeTextFile(targetPath, rendered)
+    // Render both AGENTS.md and CLAUDE.md templates
+    const templates = ['AGENTS.md', 'CLAUDE.md']
+
+    for (const templateName of templates) {
+      const templatePath = join(this.repoPath, 'repo', 'instructions', 'project', `${templateName}.eta`)
+
+      // Check if template exists
+      if (!await exists(templatePath)) {
+        continue
+      }
+
+      // Load and render template
+      const template = await Deno.readTextFile(templatePath)
+      const renderedContent = this.eta.renderString(template, context)
+
+      // Write to provider directory
+      const targetPath = join(providerDir, templateName)
+      await Deno.writeTextFile(targetPath, renderedContent)
+    }
 
     this.logVerbose(`  ✓ Rendered instructions`)
-    return true
+  }
+
+  private async renderSkillsSection(provider: string, skills: string[]): Promise<string> {
+    const skillsTemplatePath = join(this.repoPath, 'repo', 'instructions', 'common', 'skills.eta')
+
+    if (!await exists(skillsTemplatePath)) {
+      return ''
+    }
+
+    // Get skill information
+    const skillsDir = join(this.repoPath, 'repo', 'skills')
+    const skillsList: Array<{ name: string; description: string }> = []
+
+    for (const skillName of skills) {
+      const skillDir = join(skillsDir, `sa-${skillName}`)
+      const skillFilePath = join(skillDir, 'SKILL.md')
+
+      if (await exists(skillFilePath)) {
+        try {
+          const content = await Deno.readTextFile(skillFilePath)
+          const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/)
+
+          if (frontmatterMatch) {
+            const frontmatter = frontmatterMatch[1]
+            const descMatch = frontmatter.match(/description:\s*(.+)/)
+            const description = descMatch ? descMatch[1].trim() : 'No description'
+
+            skillsList.push({ name: skillName, description })
+          }
+        } catch {
+          // Skip if can't read
+        }
+      }
+    }
+
+    // Render skills template
+    const template = await Deno.readTextFile(skillsTemplatePath)
+    return this.eta.renderString(template, { skills: skillsList })
   }
 
   private async copyDirectory(src: string, dest: string): Promise<void> {
