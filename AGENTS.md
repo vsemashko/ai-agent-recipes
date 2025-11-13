@@ -204,114 +204,117 @@ During `agent-recipes sync`, the system:
 
 ### Project-Level Support
 
-**Overview**: Project-level configurations enable teams to commit AI agent settings directly to their repositories, ensuring consistent setups across all team members and multiple AI coding tools.
+**Overview**: Project-level support enables teams to sync centrally-curated AI agent configurations directly to project repositories, ensuring consistent setups across all team members and multiple AI coding tools.
 
 **Key Benefits**:
 
-- **Team Consistency**: Everyone uses the same AI agent configurations
-- **Multi-Tool Support**: Works with Claude Code, OpenCode, Codex, Cursor, and other providers
-- **Project-Specific Context**: Knowledge committed to repo, not in long skills
-- **Reduced Overhead**: Only sync relevant skills, exclude documentation skills
-- **Easy Onboarding**: New team members get correct setup on clone
+- **Team Consistency**: Everyone uses the same centrally-managed agent configurations
+- **Multi-Tool Support**: Works with Claude Code, OpenCode, Codex, Cursor
+- **Reduced Overhead**: Only essential skills synced, large documentation skills excluded
+- **Easy Onboarding**: New team members get correct setup with single command
+- **Zero Configuration**: Central config in agent-recipes repo, no per-project setup
 
-**Directory Structure**:
+**Central Configuration**:
+
+The repository contains `project-sync-config.json` that defines what gets synced to all projects:
+
+```json
+{
+  "skills": {
+    "include": ["commit-message", "branch-name", "rightsize"],
+    "exclude": ["document-skills-*", "skill-sandbox", "skill-creator", "slack-gif-creator"]
+  },
+  "agents": {
+    "include": []
+  },
+  "commands": {
+    "include": []
+  }
+}
+```
+
+**Directory Structure** (after sync):
 
 ```
 project-root/
 ├── .agent-recipes/
-│   ├── config.json                 # Project configuration
 │   ├── state.json                  # Project-level state tracking
-│   ├── skills/                     # Curated subset of skills
-│   │   ├── sa-commit-message/
-│   │   └── sa-branch-name/
-│   ├── agents/                     # Project-specific agents
-│   │   └── project-reviewer.md
-│   ├── commands/                   # Project-specific commands
-│   │   └── build-and-test.md
-│   └── providers/                  # Provider-specific configs
-│       ├── claude/
-│       │   ├── AGENTS.md
-│       │   ├── skills/
-│       │   └── agents/
-│       ├── opencode/
-│       │   └── AGENTS.md
-│       └── codex/
-│           └── AGENTS.md
-```
-
-**Project Configuration** (`.agent-recipes/config.json`):
-
-```json
-{
-  "version": "1.0",
-  "providers": ["claude", "opencode", "codex"],
-
-  "skills": {
-    "include": ["commit-message", "branch-name", "rightsize"],
-    "exclude": ["document-skills-*"]
-  },
-
-  "agents": {
-    "source": "local",
-    "include": ["project-reviewer"]
-  },
-
-  "commands": {
-    "source": "local",
-    "include": ["build-and-test"]
-  },
-
-  "providerOverrides": {
-    "claude": {
-      "model": "claude-sonnet-4"
-    }
-  }
-}
+│   ├── .claude/
+│   │   ├── AGENTS.md               # Global instructions + skills
+│   │   ├── CLAUDE.md               # Claude-specific instructions
+│   │   ├── skills/                 # Synced skills
+│   │   │   ├── sa-commit-message/
+│   │   │   └── sa-branch-name/
+│   │   ├── agents/                 # Synced agents (if any)
+│   │   └── commands/               # Synced commands (if any)
+│   ├── .config/
+│   │   └── opencode/
+│   │       ├── AGENTS.md
+│   │       ├── skills/
+│   │       ├── agent/
+│   │       └── command/
+│   ├── .codex/
+│   │   ├── AGENTS.md
+│   │   ├── skills/
+│   │   └── prompts/
+│   └── .cursor/
+│       ├── AGENTS.md
+│       ├── skills/
+│       └── rules/
 ```
 
 **CLI Commands**:
 
 ```bash
-# Initialize project-level recipes
-agent-recipes project init [--providers=claude,opencode]
-
-# Sync recipes to project
+# Sync all providers
+cd /path/to/project
 agent-recipes project sync
 
-# List project configuration
-agent-recipes project list [--available]
+# Sync specific providers
+agent-recipes project sync --providers=claude,opencode
 
-# Add skill to project
-agent-recipes project add-skill <skill-name>
-
-# Remove skill from project
-agent-recipes project remove-skill <skill-name>
-
-# Validate configuration
-agent-recipes project validate
+# Verbose output
+agent-recipes project sync --verbose
 ```
 
-**Skill Curation**:
+**Templates**:
 
-By default, large documentation skills are excluded to minimize repository footprint:
+Templates in `instructions/project/` use GLOBAL_INSTRUCTIONS approach:
+- `AGENTS.md.eta` - Global instructions + skills section
+- `CLAUDE.md.eta` - Claude-specific with global instructions + skills
+
+**Default Excluded Skills**:
+
+Large documentation skills are excluded by default (~2.6MB):
 - `document-skills-docx` (1.2M)
 - `document-skills-pptx` (1.3M)
 - `document-skills-pdf` (74K)
 - `document-skills-xlsx` (23K)
-- `skill-sandbox`
+- `skill-sandbox`, `skill-creator`, `slack-gif-creator`
 
-**Provider-Agnostic Templates**:
+**Usage Workflow**:
 
-Templates in `instructions/project/*.eta` render provider-agnostic instruction files that work across all AI coding tools. Provider-specific overrides are applied during sync.
+1. **Initial Setup**:
+   ```bash
+   cd /path/to/project
+   agent-recipes project sync
+   git add .agent-recipes/
+   git commit -m "chore: add project-level agent recipes"
+   git push
+   ```
 
-**Migration Path**:
+2. **Team Members**:
+   ```bash
+   git pull
+   agent-recipes project sync
+   ```
 
-For existing projects:
-1. `cd /path/to/project && agent-recipes project init`
-2. Customize `.agent-recipes/config.json`
-3. `agent-recipes project sync`
-4. Commit `.agent-recipes/` to repository
-5. Team members: `git pull && agent-recipes project sync`
+3. **Updating Configuration**:
+   Edit `project-sync-config.json` in agent-recipes repo, then all projects run:
+   ```bash
+   agent-recipes project sync
+   ```
+
 
 ## System Architecture
 
@@ -322,8 +325,7 @@ The CLI is organized into specialized modules in `cli/lib/`:
 | Module                         | Lines | Responsibility                                                              |
 | ------------------------------ | ----- | --------------------------------------------------------------------------- |
 | `installer.ts`                 | 1400+ | Orchestrates sync, repository discovery, template rendering, config merging |
-| `project-installer.ts`         | 600+  | Project-level sync, skill filtering, provider-agnostic configurations       |
-| `project-config.ts`            | 300+  | Project configuration schema, validation, and skill curation                |
+| `project-installer.ts`         | 450+  | Project-level sync using central configuration (simplified)                 |
 | `config-merger.ts`             | 631+  | Three-way merge algorithm for configuration files                           |
 | `state-manager.ts`             | 202   | Persists installation state and merge tracking                              |
 | `config-format.ts`             | 183   | Auto-detects and parses JSON/JSONC/YAML/TOML formats                        |
