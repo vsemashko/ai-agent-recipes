@@ -1,0 +1,14 @@
+# Agent Recipes - Project Level
+# Recommended .gitignore for .agent-recipes/
+
+# State file (can be regenerated, optional to ignore)
+state.json
+
+# Uncomment if you don't want to commit provider directories
+# providers/
+
+# Never commit secrets or credentials
+*.key
+*.pem
+.env
+secrets.json

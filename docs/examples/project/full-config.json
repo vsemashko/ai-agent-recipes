@@ -1,0 +1,45 @@
+{
+  "version": "1.0",
+  "providers": ["claude", "opencode", "codex"],
+  "skills": {
+    "include": [
+      "commit-message",
+      "branch-name",
+      "rightsize",
+      "asdf"
+    ],
+    "exclude": [
+      "document-skills-docx",
+      "document-skills-pptx",
+      "document-skills-pdf",
+      "document-skills-xlsx",
+      "skill-sandbox"
+    ]
+  },
+  "agents": {
+    "source": "local",
+    "include": ["code-reviewer", "test-runner"]
+  },
+  "commands": {
+    "source": "local",
+    "include": ["build-test", "deploy"]
+  },
+  "providerOverrides": {
+    "claude": {
+      "model": "claude-sonnet-4",
+      "additionalSkills": []
+    },
+    "opencode": {
+      "model": "anthropic/claude-3-5-sonnet-20241022",
+      "additionalSkills": []
+    },
+    "codex": {
+      "model": "gpt-4",
+      "additionalSkills": []
+    }
+  },
+  "sync": {
+    "autoSync": true,
+    "commitToRepo": true
+  }
+}

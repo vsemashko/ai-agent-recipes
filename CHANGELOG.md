@@ -1,5 +1,59 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Project-Level Provider Support** - Major new feature enabling project-level agent recipes
+  - New `agent-recipes project` command suite for managing project configurations
+  - Initialize project recipes: `agent-recipes project init`
+  - Sync project configurations: `agent-recipes project sync`
+  - Manage skills: `agent-recipes project add-skill`, `agent-recipes project remove-skill`
+  - List and validate: `agent-recipes project list`, `agent-recipes project validate`
+
+- **Provider-Agnostic Configuration**
+  - Commit AI agent configurations directly to repositories
+  - Support for multiple providers: Claude Code, OpenCode, Codex, Cursor
+  - Provider-specific overrides in configuration
+  - Team-wide consistency with `.agent-recipes/` directory
+
+- **Selective Skill Sync**
+  - Curated skill lists per project
+  - Include/exclude patterns (e.g., `"document-skills-*"`)
+  - Default exclusions for large documentation skills
+  - Reduced repository footprint
+
+- **Project-Specific Agents & Commands**
+  - Define project-local agents in `.agent-recipes/agents/`
+  - Define project-local commands in `.agent-recipes/commands/`
+  - Inherit from user-level or use local configurations
+
+- **New Modules**
+  - `cli/lib/project-installer.ts` - Project-level sync logic (600+ lines)
+  - `cli/lib/project-config.ts` - Configuration schema and validation (300+ lines)
+  - `cli/commands/project.ts` - CLI commands for project operations
+
+- **Provider Templates**
+  - `instructions/project/claude.eta` - Claude Code project template
+  - `instructions/project/opencode.eta` - OpenCode project template
+  - `instructions/project/codex.eta` - Codex project template
+  - `instructions/project/cursor.eta` - Cursor project template
+
+### Documentation
+
+- Added comprehensive migration guide: `docs/PROJECT_LEVEL_MIGRATION.md`
+- Updated `AGENTS.md` with project-level support section
+- Added examples for configuration, agents, and commands
+- Documented best practices and troubleshooting
+
+### Benefits
+
+- **Team Consistency**: Everyone uses same AI agent configurations
+- **Multi-Tool Support**: Works across Claude Code, OpenCode, Codex, Cursor, and more
+- **Easy Onboarding**: New team members get correct setup on clone
+- **Version Control**: All configurations committed to repository
+- **Flexible**: Both user-level (personal) and project-level (team) configs coexist
+
 ## 0.1.3
 
 - feat: SA-665 integrate agents and commands sync

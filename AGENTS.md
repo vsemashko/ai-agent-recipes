@@ -202,6 +202,117 @@ During `agent-recipes sync`, the system:
 
 **Native Discovery**: All providers automatically discover agents and commands from their respective directories. No explicit listing required.
 
+### Project-Level Support
+
+**Overview**: Project-level configurations enable teams to commit AI agent settings directly to their repositories, ensuring consistent setups across all team members and multiple AI coding tools.
+
+**Key Benefits**:
+
+- **Team Consistency**: Everyone uses the same AI agent configurations
+- **Multi-Tool Support**: Works with Claude Code, OpenCode, Codex, Cursor, and other providers
+- **Project-Specific Context**: Knowledge committed to repo, not in long skills
+- **Reduced Overhead**: Only sync relevant skills, exclude documentation skills
+- **Easy Onboarding**: New team members get correct setup on clone
+
+**Directory Structure**:
+
+```
+project-root/
+├── .agent-recipes/
+│   ├── config.json                 # Project configuration
+│   ├── state.json                  # Project-level state tracking
+│   ├── skills/                     # Curated subset of skills
+│   │   ├── sa-commit-message/
+│   │   └── sa-branch-name/
+│   ├── agents/                     # Project-specific agents
+│   │   └── project-reviewer.md
+│   ├── commands/                   # Project-specific commands
+│   │   └── build-and-test.md
+│   └── providers/                  # Provider-specific configs
+│       ├── claude/
+│       │   ├── AGENTS.md
+│       │   ├── skills/
+│       │   └── agents/
+│       ├── opencode/
+│       │   └── AGENTS.md
+│       └── codex/
+│           └── AGENTS.md
+```
+
+**Project Configuration** (`.agent-recipes/config.json`):
+
+```json
+{
+  "version": "1.0",
+  "providers": ["claude", "opencode", "codex"],
+
+  "skills": {
+    "include": ["commit-message", "branch-name", "rightsize"],
+    "exclude": ["document-skills-*"]
+  },
+
+  "agents": {
+    "source": "local",
+    "include": ["project-reviewer"]
+  },
+
+  "commands": {
+    "source": "local",
+    "include": ["build-and-test"]
+  },
+
+  "providerOverrides": {
+    "claude": {
+      "model": "claude-sonnet-4"
+    }
+  }
+}
+```
+
+**CLI Commands**:
+
+```bash
+# Initialize project-level recipes
+agent-recipes project init [--providers=claude,opencode]
+
+# Sync recipes to project
+agent-recipes project sync
+
+# List project configuration
+agent-recipes project list [--available]
+
+# Add skill to project
+agent-recipes project add-skill <skill-name>
+
+# Remove skill from project
+agent-recipes project remove-skill <skill-name>
+
+# Validate configuration
+agent-recipes project validate
+```
+
+**Skill Curation**:
+
+By default, large documentation skills are excluded to minimize repository footprint:
+- `document-skills-docx` (1.2M)
+- `document-skills-pptx` (1.3M)
+- `document-skills-pdf` (74K)
+- `document-skills-xlsx` (23K)
+- `skill-sandbox`
+
+**Provider-Agnostic Templates**:
+
+Templates in `instructions/project/*.eta` render provider-agnostic instruction files that work across all AI coding tools. Provider-specific overrides are applied during sync.
+
+**Migration Path**:
+
+For existing projects:
+1. `cd /path/to/project && agent-recipes project init`
+2. Customize `.agent-recipes/config.json`
+3. `agent-recipes project sync`
+4. Commit `.agent-recipes/` to repository
+5. Team members: `git pull && agent-recipes project sync`
+
 ## System Architecture
 
 ### Module Organization
@@ -211,6 +322,8 @@ The CLI is organized into specialized modules in `cli/lib/`:
 | Module                         | Lines | Responsibility                                                              |
 | ------------------------------ | ----- | --------------------------------------------------------------------------- |
 | `installer.ts`                 | 1400+ | Orchestrates sync, repository discovery, template rendering, config merging |
+| `project-installer.ts`         | 600+  | Project-level sync, skill filtering, provider-agnostic configurations       |
+| `project-config.ts`            | 300+  | Project configuration schema, validation, and skill curation                |
 | `config-merger.ts`             | 631+  | Three-way merge algorithm for configuration files                           |
 | `state-manager.ts`             | 202   | Persists installation state and merge tracking                              |
 | `config-format.ts`             | 183   | Auto-detects and parses JSON/JSONC/YAML/TOML formats                        |
